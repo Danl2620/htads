@@ -5,6 +5,7 @@ import qualified Data.Map as Map
 
 type RoomName = String
 type ItemName = String
+type LocationName = String
 
 data Compass = North | NorthEast | East | SouthEast | South | SouthWest | West | NorthWest
              deriving (Ord, Eq, Show, Read)
@@ -28,16 +29,21 @@ data Item = Item {
 
 data PlayerInfo = PlayerInfo {
       currentRoom :: Room
+    , visitedRooms :: [RoomName]
       -- inventory and whatnot
       } deriving (Show)
 
+data WorldState = WorldState {
+      playerInfo :: PlayerInfo
+    , itemMap :: Map.Map ItemName LocationName
+    } deriving (Show)
 
-roomMap = Map.fromList 
+g_roomMap = Map.fromList 
           [("cave", Room "The Cave" "A dank cave" (Map.fromList [(North, "tunnel")]))
           ,("tunnel", Room "The Tunnel" "A low tunnel" (Map.fromList [(South, "cave")]))
           ]
 
-itemMap = Map.fromList
+g_itemMap = Map.fromList
           [("table", Item "table" "A small kitchen table" "cave")
           ,("knife", Item "knife" "A large kitchen kife" "table")
           ]
@@ -50,22 +56,25 @@ unAbbrevCompass "w" = "west"
 unAbbrevCompass "nw" = "northwest"
 unAbbrevCompass "sw" = "southwest"
 unAbbrevCompass "se" = "southeast"
+unAbbrevCompass dir = dir
 
-parseCompass :: String -> Compass
+parseCompass :: String -> Maybe Compass
 parseCompass dir = case unAbbrevCompass dir of
-                     "north" -> North
-                     "northeast" -> NorthEast
-                     "northwest" -> NorthWest
-                     "east" -> East
-                     "west" -> West
-                     "south" -> South
-                     "southeast" -> SouthEast
-                     "southwest" -> SouthWest
-                     _ -> error $ "bad compass " ++ dir
+                     "north" -> Just North
+                     "northeast" -> Just NorthEast
+                     "northwest" -> Just NorthWest
+                     "east" -> Just East
+                     "west" -> Just West
+                     "south" -> Just South
+                     "southeast" -> Just SouthEast
+                     "southwest" -> Just SouthWest
+                     _ -> Nothing
 
 parseCommand :: String -> Verb
 parseCommand cmdline = case cmd of
-                         "go" -> Go $ parseCompass obj
+                         "go" -> case parseCompass obj of
+                                   Just dir -> Go dir
+                                   Nothing -> Error $ "Unrecognized direction " ++ obj
                          "look" -> Look
                          ":j" -> Skip obj
                          "quit" -> Quit
@@ -75,36 +84,39 @@ parseCommand cmdline = case cmd of
           cmd = head wordList
           obj = head $ tail wordList
 
-goToRoom pi roomName = case Map.lookup roomName roomMap of
-                      Just newRoom -> (pi { currentRoom = newRoom }, Nothing)
-                      Nothing -> error $ "missing room " ++ roomName
+goToRoom ws roomName = case Map.lookup roomName g_roomMap of
+                         Just newRoom -> let pi = (playerInfo ws) { currentRoom = newRoom } in
+                                         (ws { playerInfo = pi }, Nothing)
+                         Nothing -> error $ "missing room " ++ roomName
 
-parseLine :: PlayerInfo -> String -> (PlayerInfo, Maybe String)
-parseLine pi cmdline = case parseCommand cmdline of
-                        Look -> (pi, Just $ description room)
+parseLine :: WorldState -> String -> (WorldState, Maybe String)
+parseLine ws cmdline = case parseCommand cmdline of
+                        Look -> (ws, Just $ description room)
                         Go dir -> case Map.lookup dir (connections room) of
-                                    Just roomName -> goToRoom pi roomName
-                                    Nothing -> (pi, Just "Can't go that direction")
-                        Skip roomName -> goToRoom pi roomName
-                        Examine itemName -> (pi, Just $ "It looks like a " ++ itemName)
+                                    Just roomName -> goToRoom ws roomName
+                                    Nothing -> (ws, Just "Can't go that direction")
+                        Skip roomName -> goToRoom ws roomName
+                        Examine itemName -> (ws, Just $ "It looks like a " ++ itemName)
                         Quit -> error "done"
-                        Error msg -> (pi, Just msg)
-                      where room = currentRoom pi
+                        Error msg -> (ws, Just msg)
+                      where room = currentRoom (playerInfo ws)
 
-visitRoom :: PlayerInfo -> IO PlayerInfo
-visitRoom playerInfo = do putStr $ (name (currentRoom playerInfo)) ++ "\n> "
-                          hFlush stdout
-                          inpStr <- getLine
-                          let (newPlayerInfo, maybeMsg) = parseLine playerInfo inpStr
-                          case maybeMsg of
-                            Just msg -> putStrLn $ msg
-                            Nothing -> putStrLn ""
-                          visitRoom newPlayerInfo
+visitRoom :: WorldState -> IO WorldState
+visitRoom ws = do putStr $ (name (currentRoom (playerInfo ws))) ++ "\n> "
+                  hFlush stdout
+                  inpStr <- getLine
+                  let (newWorldState, maybeMsg) = parseLine ws inpStr
+                  case maybeMsg of
+                    Just msg -> putStrLn $ msg
+                    Nothing -> putStrLn ""
+                  visitRoom newWorldState
+
+generateWorldItemMap :: Map.Map ItemName Item -> Map.Map ItemName LocationName
+generateWorldItemMap itemMap = 
+    Map.map (\item -> startLocation item) itemMap
 
 
 main = 
-    do isTerminal <- hIsTerminalDevice stdout
-       print isTerminal
-       case (Map.lookup "cave" roomMap) of
-         Just room -> visitRoom $ PlayerInfo room
-         Nothing -> error "Asdf"
+    case (Map.lookup "cave" g_roomMap) of
+      Just room -> visitRoom $ WorldState (PlayerInfo room []) (generateWorldItemMap g_itemMap)
+      Nothing -> error "Asdf"
