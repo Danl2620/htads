@@ -2,6 +2,7 @@
 import System.IO
 import qualified Data.Char as Char
 import qualified Data.Map as Map
+import Alias
 
 type RoomName = String
 type ItemName = String
@@ -14,6 +15,7 @@ data Verb = Look | Go Compass | Examine ItemName | Quit | Skip RoomName | Error 
            deriving (Show)
 
 type Connection = Map.Map Compass String
+type Aliases = Map.Map String String
 
 data Room = Room {
       name :: RoomName
@@ -36,6 +38,7 @@ data PlayerInfo = PlayerInfo {
 data WorldState = WorldState {
       playerInfo :: PlayerInfo
     , itemMap :: Map.Map ItemName LocationName
+    , aliases :: Aliases
     } deriving (Show)
 
 g_nullRoom = Room "<none>" "<none>" Map.empty
@@ -72,17 +75,24 @@ parseCompass dir = case unAbbrevCompass dir of
                      "southwest" -> Just SouthWest
                      _ -> Nothing
 
-parseCommand :: String -> Verb
-parseCommand cmdline = case cmd of
-                         "go" -> case parseCompass obj of
-                                   Just dir -> Go dir
-                                   Nothing -> Error $ "Unrecognized direction " ++ obj
-                         "look" -> Look
-                         ":j" -> Skip obj
-                         "quit" -> Quit
-                         "examine" -> Examine obj
-                         _ -> Error $ "Unrecognized command " ++ cmd
-    where wordList = words $ map Char.toLower cmdline
+translateCommand :: Aliases -> String -> String
+translateCommand aliases cmd = 
+    case Map.lookup cmd aliases of
+      Just newCmd -> newCmd
+      Nothing -> cmd
+
+parseCommand :: WorldState ->String -> Verb
+parseCommand ws cmdline = 
+    case cmd of
+      "go" -> case parseCompass obj of
+                Just dir -> Go dir
+                Nothing -> Error $ "Unrecognized direction " ++ obj
+      "look" -> Look
+      ":j" -> Skip obj
+      "quit" -> Quit
+      "examine" -> Examine obj
+      _ -> Error $ "Unrecognized command " ++ cmd
+    where wordList = words $ map Char.toLower (translateCommand (aliases ws) cmdline)
           cmd = head wordList
           obj = head $ tail wordList
 
@@ -104,7 +114,7 @@ goToRoom ws roomName =
       Nothing -> error $ "missing room " ++ roomName
 
 parseLine :: WorldState -> String -> (WorldState, Maybe String)
-parseLine ws cmdline = case parseCommand cmdline of
+parseLine ws cmdline = case parseCommand ws cmdline of
                         Look -> (ws, Just $ description room)
                         Go dir -> case Map.lookup dir (connections room) of
                                     Just roomName -> goToRoom ws roomName
@@ -130,5 +140,12 @@ generateWorldItemMap itemMap =
     Map.map (\item -> startLocation item) itemMap
 
 
-main = eval ws ":j cave"
-    where ws = WorldState (PlayerInfo g_nullRoom []) (generateWorldItemMap g_itemMap)
+main = 
+    do h <- openFile "aliases.txt" ReadMode
+       c <- hGetContents h
+       let aliasMap = case parseAliases c of
+                        Left e -> Map.empty
+                        Right r -> Map.fromList r
+           ws = WorldState (PlayerInfo g_nullRoom []) (generateWorldItemMap g_itemMap) aliasMap
+       eval ws ":j cave"
+    

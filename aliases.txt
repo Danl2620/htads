@@ -1,0 +1,13 @@
+
+n = go north
+s = go south
+e = go east
+w = go west
+ne = go northeast
+nw = go northwest
+se = go southeast
+sw = go southwest
+i = inventory
+l = look
+ex = examine
+q = quit
