@@ -29,7 +29,7 @@ data Item = Item {
 
 data PlayerInfo = PlayerInfo {
       currentRoom :: Room
-    , visitedRooms :: [RoomName]
+    , visitedRooms :: [LocationName]
       -- inventory and whatnot
       } deriving (Show)
 
@@ -37,6 +37,8 @@ data WorldState = WorldState {
       playerInfo :: PlayerInfo
     , itemMap :: Map.Map ItemName LocationName
     } deriving (Show)
+
+g_nullRoom = Room "<none>" "<none>" Map.empty
 
 g_roomMap = Map.fromList 
           [("cave", Room "The Cave" "A dank cave" (Map.fromList [(North, "tunnel")]))
@@ -84,10 +86,22 @@ parseCommand cmdline = case cmd of
           cmd = head wordList
           obj = head $ tail wordList
 
-goToRoom ws roomName = case Map.lookup roomName g_roomMap of
-                         Just newRoom -> let pi = (playerInfo ws) { currentRoom = newRoom } in
-                                         (ws { playerInfo = pi }, Nothing)
-                         Nothing -> error $ "missing room " ++ roomName
+combineVisitedRooms :: LocationName -> [LocationName] -> [LocationName]
+combineVisitedRooms name nameList = 
+    if name `elem` nameList 
+       then nameList
+       else name : nameList
+
+goToRoom ws roomName = 
+    case Map.lookup roomName g_roomMap of
+      Just newRoom -> let oldPi = (playerInfo ws) 
+                          pi = oldPi { currentRoom = newRoom
+                                     , visitedRooms = combineVisitedRooms roomName (visitedRooms oldPi) } 
+                          maybeMsg = if roomName `elem` (visitedRooms oldPi)
+                                       then Just $ name newRoom
+                                       else Just $ description newRoom in                        
+                      (ws { playerInfo = pi }, maybeMsg)
+      Nothing -> error $ "missing room " ++ roomName
 
 parseLine :: WorldState -> String -> (WorldState, Maybe String)
 parseLine ws cmdline = case parseCommand cmdline of
@@ -101,22 +115,20 @@ parseLine ws cmdline = case parseCommand cmdline of
                         Error msg -> (ws, Just msg)
                       where room = currentRoom (playerInfo ws)
 
-visitRoom :: WorldState -> IO WorldState
-visitRoom ws = do putStr $ (name (currentRoom (playerInfo ws))) ++ "\n> "
-                  hFlush stdout
-                  inpStr <- getLine
-                  let (newWorldState, maybeMsg) = parseLine ws inpStr
-                  case maybeMsg of
-                    Just msg -> putStrLn $ msg
-                    Nothing -> putStrLn ""
-                  visitRoom newWorldState
+eval :: WorldState -> String -> IO WorldState
+eval ws cmd = do let (newWorldState, maybeMsg) = parseLine ws cmd
+                 case maybeMsg of
+                   Just msg -> putStrLn $ msg
+                   Nothing -> putStrLn ""
+                 putStr "> "
+                 hFlush stdout
+                 inpStr <- getLine
+                 eval newWorldState inpStr
 
 generateWorldItemMap :: Map.Map ItemName Item -> Map.Map ItemName LocationName
 generateWorldItemMap itemMap = 
     Map.map (\item -> startLocation item) itemMap
 
 
-main = 
-    case (Map.lookup "cave" g_roomMap) of
-      Just room -> visitRoom $ WorldState (PlayerInfo room []) (generateWorldItemMap g_itemMap)
-      Nothing -> error "Asdf"
+main = eval ws ":j cave"
+    where ws = WorldState (PlayerInfo g_nullRoom []) (generateWorldItemMap g_itemMap)
