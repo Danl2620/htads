@@ -38,10 +38,10 @@ eol =   try (string "\n\r")
 parseAliases :: String -> Either ParseError [(String, String)]
 parseAliases input = parse aliasFile "alias" input
 
-main =
-    do c <- getContents
-       print $ case parseAliases c of
-                 Left e -> "Error parsing input:" ++ show e
-                 Right r -> show $ Map.fromList r
+-- main =
+--     do c <- getContents
+--        print $ case parseAliases c of
+--                  Left e -> "Error parsing input:" ++ show e
+--                  Right r -> show $ Map.fromList r
 
 -- $ case parse csvFile "alias" c of

@@ -18,7 +18,7 @@ type Connection = Map.Map Compass String
 type Aliases = Map.Map String String
 
 data Room = Room {
-      name :: RoomName
+      summary :: RoomName
     , description :: String
     , connections :: Connection
     } deriving (Show)
@@ -30,14 +30,14 @@ data Item = Item {
       } deriving (Show)
 
 data PlayerInfo = PlayerInfo {
-      currentRoom :: Room
+      currentRoom :: LocationName
     , visitedRooms :: [LocationName]
       -- inventory and whatnot
       } deriving (Show)
 
 data WorldState = WorldState {
       playerInfo :: PlayerInfo
-    , itemMap :: Map.Map ItemName LocationName
+    , itemMap :: Map.Map LocationName [ItemName]
     , aliases :: Aliases
     } deriving (Show)
 
@@ -50,8 +50,25 @@ g_roomMap = Map.fromList
 
 g_itemMap = Map.fromList
           [("table", Item "table" "A small kitchen table" "cave")
+          ,("sandbag", Item "sandbag" "A large bag of sand" "cave")
           ,("knife", Item "knife" "A large kitchen kife" "table")
           ]
+
+lookupRoom :: LocationName -> Room
+lookupRoom name = case Map.lookup name g_roomMap of
+                    Just r -> r
+                    Nothing -> error $ "missing room " ++ name
+
+getRoomDescription :: WorldState -> LocationName -> String
+getRoomDescription ws roomName = 
+    "\n" ++ (description room) ++ itemDesc
+    where room = lookupRoom roomName
+          items = case Map.lookup roomName $ itemMap ws of
+                    Just lst -> lst
+                    Nothing -> []
+          itemDesc = if null items
+                     then ""
+                     else "\n\nContains:\n" ++ concatMap (\item -> "\tA " ++ item ++ "\n") items
 
 unAbbrevCompass "n" = "north"
 unAbbrevCompass "ne" = "northeast"
@@ -103,19 +120,18 @@ combineVisitedRooms name nameList =
        else name : nameList
 
 goToRoom ws roomName = 
-    case Map.lookup roomName g_roomMap of
-      Just newRoom -> let oldPi = (playerInfo ws) 
-                          pi = oldPi { currentRoom = newRoom
-                                     , visitedRooms = combineVisitedRooms roomName (visitedRooms oldPi) } 
-                          maybeMsg = if roomName `elem` (visitedRooms oldPi)
-                                       then Just $ name newRoom
-                                       else Just $ description newRoom in                        
-                      (ws { playerInfo = pi }, maybeMsg)
-      Nothing -> error $ "missing room " ++ roomName
+    let oldPi = (playerInfo ws) 
+        pi = oldPi { currentRoom = roomName
+                   , visitedRooms = combineVisitedRooms roomName (visitedRooms oldPi) } 
+        msg = if roomName `elem` (visitedRooms oldPi)
+              then summary newRoom
+              else getRoomDescription ws roomName in
+    (ws { playerInfo = pi }, Just msg)
+    where newRoom = lookupRoom roomName
 
 parseLine :: WorldState -> String -> (WorldState, Maybe String)
 parseLine ws cmdline = case parseCommand ws cmdline of
-                        Look -> (ws, Just $ description room)
+                        Look -> (ws, Just $ getRoomDescription ws roomName)
                         Go dir -> case Map.lookup dir (connections room) of
                                     Just roomName -> goToRoom ws roomName
                                     Nothing -> (ws, Just "Can't go that direction")
@@ -123,7 +139,8 @@ parseLine ws cmdline = case parseCommand ws cmdline of
                         Examine itemName -> (ws, Just $ "It looks like a " ++ itemName)
                         Quit -> error "done"
                         Error msg -> (ws, Just msg)
-                      where room = currentRoom (playerInfo ws)
+                      where roomName = currentRoom (playerInfo ws)
+                            room = lookupRoom roomName
 
 eval :: WorldState -> String -> IO WorldState
 eval ws cmd = do let (newWorldState, maybeMsg) = parseLine ws cmd
@@ -135,10 +152,9 @@ eval ws cmd = do let (newWorldState, maybeMsg) = parseLine ws cmd
                  inpStr <- getLine
                  eval newWorldState inpStr
 
-generateWorldItemMap :: Map.Map ItemName Item -> Map.Map ItemName LocationName
+generateWorldItemMap :: Map.Map ItemName Item -> Map.Map LocationName [ItemName]
 generateWorldItemMap itemMap = 
-    Map.map (\item -> startLocation item) itemMap
-
+    Map.fromListWith (++) $ map (\pair -> (startLocation $ snd pair, [fst pair])) $ Map.assocs itemMap
 
 main = 
     do h <- openFile "aliases.txt" ReadMode
@@ -146,6 +162,6 @@ main =
        let aliasMap = case parseAliases c of
                         Left e -> Map.empty
                         Right r -> Map.fromList r
-           ws = WorldState (PlayerInfo g_nullRoom []) (generateWorldItemMap g_itemMap) aliasMap
+           ws = WorldState (PlayerInfo "<none>" []) (generateWorldItemMap g_itemMap) aliasMap
        eval ws ":j cave"
     
