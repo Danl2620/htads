@@ -2,6 +2,8 @@
 import System.IO
 import qualified Data.Char as Char
 import qualified Data.Map as Map
+import qualified Data.List as List
+import Data.Char (isSpace)
 import Alias
 
 type RoomName = String
@@ -44,31 +46,46 @@ data WorldState = WorldState {
 g_nullRoom = Room "<none>" "<none>" Map.empty
 
 g_roomMap = Map.fromList 
-          [("cave", Room "The Cave" "A dank cave" (Map.fromList [(North, "tunnel")]))
-          ,("tunnel", Room "The Tunnel" "A low tunnel" (Map.fromList [(South, "cave")]))
+          [("start", Room "Outside cave" "You're standing in the bright sunlight just outside of a large, dark, foreboding cave, which lies to the north. " (Map.fromList [(North, "cave")]))
+          ,("cave", Room "Cave" "You're inside a dark and musty cave. Sunlight pours in from a passage to the south." (Map.fromList [(South, "start")]))
           ]
 
 g_itemMap = Map.fromList
-          [("table", Item "table" "A small kitchen table" "cave")
+          [("pedestal", Item "pedestal" "pedestal" "cave")
+          ,("goldSkull", Item "gold skull" "gold skull" "cave")
+          ,("table", Item "table" "A small kitchen table" "cave")
           ,("sandbag", Item "sandbag" "A large bag of sand" "cave")
           ,("knife", Item "knife" "A large kitchen kife" "table")
           ]
+
+wrap :: Int -> String -> String
+wrap width str = 
+    if length str <= width
+    then str
+    else let chop = words $ take width str 
+             len = length chop
+             pre = (unwords $ take (len - 1) chop) in
+          pre ++ "\n" ++ (wrap width $ dropWhile isSpace $ drop (length pre) str)
 
 lookupRoom :: LocationName -> Room
 lookupRoom name = case Map.lookup name g_roomMap of
                     Just r -> r
                     Nothing -> error $ "missing room " ++ name
+           
 
 getRoomDescription :: WorldState -> LocationName -> String
 getRoomDescription ws roomName = 
-    "\n" ++ (description room) ++ itemDesc
+    "\n" ++ wrap 60 (description room) ++ itemDesc
     where room = lookupRoom roomName
           items = case Map.lookup roomName $ itemMap ws of
                     Just lst -> lst
                     Nothing -> []
           itemDesc = if null items
-                     then ""
-                     else "\n\nContains:\n" ++ concatMap (\item -> "\tA " ++ item ++ "\n") items
+                     then "\n"
+                     else "\n\nContains:\n  " ++ List.intercalate "\n  " items ++ "\n"
+--           itemDesc = if null items
+--                      then ""
+--                      else "\n\nContains:\n" ++ concatMap (\item -> "\tA " ++ item ++ "\n") items
 
 unAbbrevCompass "n" = "north"
 unAbbrevCompass "ne" = "northeast"
@@ -163,5 +180,5 @@ main =
                         Left e -> Map.empty
                         Right r -> Map.fromList r
            ws = WorldState (PlayerInfo "<none>" []) (generateWorldItemMap g_itemMap) aliasMap
-       eval ws ":j cave"
+       eval ws ":j start"
     
