@@ -13,7 +13,7 @@ type LocationName = String
 data Compass = North | NorthEast | East | SouthEast | South | SouthWest | West | NorthWest
              deriving (Ord, Eq, Show, Read)
 
-data Verb = Look | Go Compass | Examine ItemName | Quit | Skip RoomName | Error String
+data Verb = Look | Go Compass | Examine ItemName | Get ItemName | Inventory | Quit | Skip RoomName | Error String
            deriving (Show)
 
 type Connection = Map.Map Compass String
@@ -34,7 +34,7 @@ data Item = Item {
 data PlayerInfo = PlayerInfo {
       currentRoom :: LocationName
     , visitedRooms :: [LocationName]
-      -- inventory and whatnot
+    , inventory :: [ItemName]
       } deriving (Show)
 
 data WorldState = WorldState {
@@ -68,21 +68,16 @@ wrap width str =
           pre ++ "\n" ++ (wrap width $ dropWhile isSpace $ drop (length pre) str)
 
 lookupRoom :: LocationName -> Room
-lookupRoom name = case Map.lookup name g_roomMap of
-                    Just r -> r
-                    Nothing -> error $ "missing room " ++ name
+lookupRoom name = maybe (error $ "missing room " ++ name) id $ Map.lookup name g_roomMap
            
-
 getRoomDescription :: WorldState -> LocationName -> String
 getRoomDescription ws roomName = 
-    "\n" ++ wrap 60 (description room) ++ itemDesc
+    "\n_" ++ (summary room) ++ "_\n" ++ wrap 60 (description room) ++ itemDesc
     where room = lookupRoom roomName
-          items = case Map.lookup roomName $ itemMap ws of
-                    Just lst -> lst
-                    Nothing -> []
+          items = maybe [] (map (\name -> maybe (error "missing item " ++ name) itemName $ Map.lookup name g_itemMap)) $ Map.lookup roomName $ itemMap ws
           itemDesc = if null items
                      then "\n"
-                     else "\n\nContains:\n  " ++ List.intercalate "\n  " items ++ "\n"
+                     else "\n\nYou see a " ++ List.intercalate ", a " items ++ ".\n"
 --           itemDesc = if null items
 --                      then ""
 --                      else "\n\nContains:\n" ++ concatMap (\item -> "\tA " ++ item ++ "\n") items
@@ -110,17 +105,14 @@ parseCompass dir = case unAbbrevCompass dir of
                      _ -> Nothing
 
 translateCommand :: Aliases -> String -> String
-translateCommand aliases cmd = 
-    case Map.lookup cmd aliases of
-      Just newCmd -> newCmd
-      Nothing -> cmd
+translateCommand aliases cmd = maybe cmd id $ Map.lookup cmd aliases
 
 parseCommand :: WorldState ->String -> Verb
 parseCommand ws cmdline = 
     case cmd of
-      "go" -> case parseCompass obj of
-                Just dir -> Go dir
-                Nothing -> Error $ "Unrecognized direction " ++ obj
+      "go" -> maybe (Error $ "Unrecognized direction " ++ obj) Go $ parseCompass obj
+      "get" -> Get obj
+      "inventory" -> Inventory
       "look" -> Look
       ":j" -> Skip obj
       "quit" -> Quit
@@ -146,6 +138,23 @@ goToRoom ws roomName =
     (ws { playerInfo = pi }, Just msg)
     where newRoom = lookupRoom roomName
 
+tryPickupItem :: WorldState -> ItemName -> (WorldState, Maybe String)
+tryPickupItem ws itemName = 
+    if itemName `elem` items
+    then let pi = (playerInfo ws)
+             newPi = pi { inventory = itemName : (inventory pi) } in
+             -- todo: remove the item from the world itemmap
+         (ws { playerInfo = newPi }, Just $ itemName ++ " picked up." )
+    else (ws, Just $ "There is no " ++ itemName ++ " here.")
+    where roomName = currentRoom (playerInfo ws)
+          items = case Map.lookup roomName $ itemMap ws of
+                    Just lst -> lst
+                    Nothing -> []
+
+showInventory :: WorldState -> (WorldState, Maybe String)
+showInventory ws = let pi = (playerInfo ws) in
+                   (ws, Just $ "You are carrying:\n  " ++ List.intercalate "\n  " (inventory pi) )
+
 parseLine :: WorldState -> String -> (WorldState, Maybe String)
 parseLine ws cmdline = case parseCommand ws cmdline of
                         Look -> (ws, Just $ getRoomDescription ws roomName)
@@ -154,18 +163,22 @@ parseLine ws cmdline = case parseCommand ws cmdline of
                                     Nothing -> (ws, Just "Can't go that direction")
                         Skip roomName -> goToRoom ws roomName
                         Examine itemName -> (ws, Just $ "It looks like a " ++ itemName)
+                        Get itemName -> tryPickupItem ws itemName
+                        Inventory -> showInventory ws
                         Quit -> error "done"
                         Error msg -> (ws, Just msg)
-                      where roomName = currentRoom (playerInfo ws)
+                      where roomName = currentRoom $ playerInfo ws
                             room = lookupRoom roomName
+
+flushStr :: String -> IO ()
+flushStr str = putStr str >> hFlush stdout
 
 eval :: WorldState -> String -> IO WorldState
 eval ws cmd = do let (newWorldState, maybeMsg) = parseLine ws cmd
                  case maybeMsg of
                    Just msg -> putStrLn $ msg
                    Nothing -> putStrLn ""
-                 putStr "> "
-                 hFlush stdout
+                 flushStr "> "
                  inpStr <- getLine
                  eval newWorldState inpStr
 
@@ -179,6 +192,9 @@ main =
        let aliasMap = case parseAliases c of
                         Left e -> Map.empty
                         Right r -> Map.fromList r
-           ws = WorldState (PlayerInfo "<none>" []) (generateWorldItemMap g_itemMap) aliasMap
+           ws = WorldState (PlayerInfo "<none>" [] []) (generateWorldItemMap g_itemMap) aliasMap
        eval ws ":j start"
     
+
+Nothing >>? _ = Nothing
+Just v  >>? f = f v
