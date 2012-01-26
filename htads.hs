@@ -11,10 +11,13 @@ type ItemName = String
 type LocationName = String
 
 data Compass = North | NorthEast | East | SouthEast | South | SouthWest | West | NorthWest
-             deriving (Ord, Eq, Show, Read)
+               deriving (Ord, Eq, Show, Read)
 
 data Verb = Look | Go Compass | Examine ItemName | Get ItemName | Inventory | Quit | Skip RoomName | Error String
-           deriving (Show)
+            deriving (Show)
+
+data ItemAttribute = Fixed | Bulky
+                     deriving (Show)
 
 type Connection = Map.Map Compass String
 type Aliases = Map.Map String String
@@ -26,10 +29,20 @@ data Room = Room {
     } deriving (Show)
 
 data Item = Item {
-      itemName :: ItemName
+      nouns :: [String]
+    , adjectives :: [String]
     , itemDescription :: String
+    , itemAttributes :: [ItemAttribute]
     , startLocation :: String
       } deriving (Show)
+
+itemName item = List.intercalate " " [adjective, noun]
+                where adjective = if null $ adjectives item
+                                  then ""
+                                  else head $ adjectives item
+                      noun = if null $ nouns item
+                             then ""
+                             else head $ nouns item
 
 data PlayerInfo = PlayerInfo {
       currentRoom :: LocationName
@@ -51,11 +64,11 @@ g_roomMap = Map.fromList
           ]
 
 g_itemMap = Map.fromList
-          [("pedestal", Item "pedestal" "pedestal" "cave")
-          ,("goldSkull", Item "gold skull" "gold skull" "cave")
-          ,("table", Item "table" "A small kitchen table" "cave")
-          ,("sandbag", Item "sandbag" "A large bag of sand" "cave")
-          ,("knife", Item "knife" "A large kitchen kife" "table")
+          [("pedestal", Item ["pedestal"] [] "pedestal" [Fixed] "cave")
+          ,("skull", Item ["skull"] ["gold"] "gold skull" [] "cave")
+          ,("table", Item ["table"] ["small"] "A small kitchen table" [Bulky] "cave")
+          ,("sandbag", Item ["sandbag", "bag"] ["large"] "A large bag of sand" [Bulky] "cave")
+          ,("knife", Item ["knife"] ["large"] "A large kitchen kife" [] "table")
           ]
 
 wrap :: Int -> String -> String
