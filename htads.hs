@@ -1,3 +1,4 @@
+module Htads where
 
 import System.IO
 import qualified Data.Char as Char
@@ -6,9 +7,14 @@ import qualified Data.List as List
 import Data.Char (isSpace)
 import Alias
 
-type RoomName = String
-type ItemName = String
-type LocationName = String
+-- string with no whitespace:
+-- newtype NoWhitespace = NoWhitespace String; toString (NoWhitespace s) = s; fromString s | all (not . isSpace) s = NoWhiteSpace s | otherwise = error "no"
+
+strip = reverse . dropWhile isSpace . reverse . dropWhile isSpace
+
+type Word = String
+type RoomName = Word
+type ItemName = Word
 
 data Compass = North | NorthEast | East | SouthEast | South | SouthWest | West | NorthWest
                deriving (Ord, Eq, Show, Read)
@@ -29,14 +35,14 @@ data Room = Room {
     } deriving (Show)
 
 data Item = Item {
-      nouns :: [String]
-    , adjectives :: [String]
+      nouns :: [Word]
+    , adjectives :: [Word]
     , itemDescription :: String
     , itemAttributes :: [ItemAttribute]
     , startLocation :: String
       } deriving (Show)
 
-itemName item = List.intercalate " " [adjective, noun]
+itemName item = strip $ List.intercalate " " [adjective, noun]
                 where adjective = if null $ adjectives item
                                   then ""
                                   else head $ adjectives item
@@ -45,14 +51,14 @@ itemName item = List.intercalate " " [adjective, noun]
                              else head $ nouns item
 
 data PlayerInfo = PlayerInfo {
-      currentRoom :: LocationName
-    , visitedRooms :: [LocationName]
+      currentRoom :: RoomName
+    , visitedRooms :: [RoomName]
     , inventory :: [ItemName]
       } deriving (Show)
 
 data WorldState = WorldState {
       playerInfo :: PlayerInfo
-    , itemMap :: Map.Map LocationName [ItemName]
+    , itemMap :: Map.Map RoomName [ItemName]
     , aliases :: Aliases
     } deriving (Show)
 
@@ -67,7 +73,8 @@ g_itemMap = Map.fromList
           [("pedestal", Item ["pedestal"] [] "pedestal" [Fixed] "cave")
           ,("skull", Item ["skull"] ["gold"] "gold skull" [] "cave")
           ,("table", Item ["table"] ["small"] "A small kitchen table" [Bulky] "cave")
-          ,("sandbag", Item ["sandbag", "bag"] ["large"] "A large bag of sand" [Bulky] "cave")
+          ,("largeSandbag", Item ["sandbag", "bag"] ["large"] "A large bag of sand" [Bulky] "cave")
+          ,("smallSandbag", Item ["sandbag", "bag"] ["small"] "A small bag of sand" [] "cave")
           ,("knife", Item ["knife"] ["large"] "A large kitchen kife" [] "table")
           ]
 
@@ -80,17 +87,26 @@ wrap width str =
              pre = (unwords $ take (len - 1) chop) in
           pre ++ "\n" ++ (wrap width $ dropWhile isSpace $ drop (length pre) str)
 
-lookupRoom :: LocationName -> Room
+lookupItem :: ItemName -> Item
+lookupItem name = maybe (error $ "missing item " ++ name) id $ Map.lookup name g_itemMap
+
+lookupRoom :: RoomName -> Room
 lookupRoom name = maybe (error $ "missing room " ++ name) id $ Map.lookup name g_roomMap
 
-getRoomDescription :: WorldState -> LocationName -> String
+getItemsFromRoom :: WorldState -> RoomName -> [Item]
+getItemsFromRoom ws roomName = map lookupItem itemNames
+    where itemNames = maybe [] id $ Map.lookup roomName $ itemMap ws
+
+-- maybe [] (map (\name -> maybe (error "missing item " ++ name) id $ Map.lookup name g_itemMap)) id $ Map.lookup roomName $ itemMap ws
+
+getRoomDescription :: WorldState -> RoomName -> String
 getRoomDescription ws roomName =
     "\n_" ++ (summary room) ++ "_\n" ++ wrap 60 (description room) ++ itemDesc
     where room = lookupRoom roomName
-          items = maybe [] (map (\name -> maybe (error "missing item " ++ name) itemName $ Map.lookup name g_itemMap)) $ Map.lookup roomName $ itemMap ws
+          items = getItemsFromRoom ws roomName
           itemDesc = if null items
                      then "\n"
-                     else "\n\nYou see a " ++ List.intercalate ", a " items ++ ".\n"
+                     else "\n\nYou see a " ++ List.intercalate ", a " (map itemName items) ++ ".\n"
 --           itemDesc = if null items
 --                      then ""
 --                      else "\n\nContains:\n" ++ concatMap (\item -> "\tA " ++ item ++ "\n") items
@@ -120,22 +136,32 @@ parseCompass dir = case unAbbrevCompass dir of
 translateCommand :: Aliases -> String -> String
 translateCommand aliases cmd = maybe cmd id $ Map.lookup cmd aliases
 
-parseCommand :: WorldState ->String -> Verb
+parseItemName :: WorldState -> [Word] -> ItemName
+parseItemName ws itemDesc = items
+
+-- something that matches itemDesc to a the itemName from the item (both stripped of leading & trailing whitespace case insensitive)
+
+itemName item
+
+    where currentRoomName = currentRoom $ playerInfo ws
+          items = getItemsFromRoom ws currentRoomName
+
+parseCommand :: WorldState -> String -> Verb
 parseCommand ws cmdline =
     case cmd of
-      "go" -> maybe (Error $ "Unrecognized direction " ++ obj) Go $ parseCompass obj
-      "get" -> Get obj
+      "go" -> maybe (Error $ "Unrecognized direction " ++ head rest) Go $ parseCompass $ head rest
+      "get" -> Get $ parseItemName ws rest
       "inventory" -> Inventory
       "look" -> Look
-      ":j" -> Skip obj
+      ":j" -> Skip $ head rest
       "quit" -> Quit
-      "examine" -> Examine obj
+      "examine" -> Examine rest
       _ -> Error $ "Unrecognized command " ++ cmd
     where wordList = words $ map Char.toLower (translateCommand (aliases ws) cmdline)
           cmd = head wordList
-          obj = head $ tail wordList
+          rest = tail wordList
 
-combineVisitedRooms :: LocationName -> [LocationName] -> [LocationName]
+combineVisitedRooms :: RoomName -> [RoomName] -> [RoomName]
 combineVisitedRooms name nameList =
     if name `elem` nameList
        then nameList
@@ -153,18 +179,19 @@ goToRoom ws roomName =
 
 tryPickupItem :: WorldState -> ItemName -> (WorldState, Maybe String)
 tryPickupItem ws itemName =
-    if itemName `elem` items
-    then let pi = (playerInfo ws)
-             newPi = pi { inventory = itemName : (inventory pi) }
-             newIm = Map.update removeItem roomName (itemMap ws) in
-         (ws { playerInfo = newPi,
-               itemMap = newIm
-             }, Just $ itemName ++ " picked up." )
-    else (ws, Just $ "There is no " ++ itemName ++ " here.")
+    case List.find itemMatches items of
+      Just item -> let pi = (playerInfo ws)
+                       newPi = pi { inventory = itemName : (inventory pi) }
+                       newIm = Map.update removeItem roomName (itemMap ws) in
+                   (ws { playerInfo = newPi,
+                         itemMap = newIm
+                       }, Just $ itemName ++ " picked up." )
+      Nothing -> (ws, Just $ "There is no " ++ itemName ++ " here.")
     where roomName = currentRoom (playerInfo ws)
           items = case Map.lookup roomName $ itemMap ws of
                     Just lst -> lst
                     Nothing -> []
+          itemMatches item = item == itemName
           removeItem itemList = Just $ List.delete itemName itemList
 
 showInventory :: WorldState -> (WorldState, Maybe String)
@@ -178,7 +205,7 @@ parseLine ws cmdline = case parseCommand ws cmdline of
                                     Just roomName -> goToRoom ws roomName
                                     Nothing -> (ws, Just "Can't go that direction")
                         Skip roomName -> goToRoom ws roomName
-                        Examine itemName -> (ws, Just $ "It looks like a " ++ itemName)
+                        Examine itemName -> (ws, Just $ "It looks like a " ++ List.intercalate " " itemName)
                         Get itemName -> tryPickupItem ws itemName
                         Inventory -> showInventory ws
                         Quit -> error "done"
@@ -198,7 +225,7 @@ eval ws cmd = do let (newWorldState, maybeMsg) = parseLine ws cmd
                  inpStr <- getLine
                  eval newWorldState inpStr
 
-generateWorldItemMap :: Map.Map ItemName Item -> Map.Map LocationName [ItemName]
+generateWorldItemMap :: Map.Map ItemName Item -> Map.Map RoomName [ItemName]
 generateWorldItemMap itemMap =
     Map.fromListWith (++) $ map (\pair -> (startLocation $ snd pair, [fst pair])) $ Map.assocs itemMap
 
