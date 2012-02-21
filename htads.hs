@@ -4,13 +4,14 @@ import System.IO
 import qualified Data.Char as Char
 import qualified Data.Map as Map
 import qualified Data.List as List
-import Data.Char (isSpace)
+import qualified Data.Text as Text
+
 import Alias
 
 -- string with no whitespace:
 -- newtype NoWhitespace = NoWhitespace String; toString (NoWhitespace s) = s; fromString s | all (not . isSpace) s = NoWhiteSpace s | otherwise = error "no"
 
-strip = reverse . dropWhile isSpace . reverse . dropWhile isSpace
+-- strip = reverse . dropWhile isSpace . reverse . dropWhile isSpace
 
 type Word = String
 type RoomName = Word
@@ -42,7 +43,8 @@ data Item = Item {
     , startLocation :: String
       } deriving (Show)
 
-itemName item = strip $ List.intercalate " " [adjective, noun]
+itemName :: Item -> ItemName
+itemName item = Text.unpack $ Text.strip $ Text.pack $ List.intercalate " " [adjective, noun]
                 where adjective = if null $ adjectives item
                                   then ""
                                   else head $ adjectives item
@@ -69,13 +71,19 @@ g_roomMap = Map.fromList
           ,("cave", Room "Cave" "You're inside a dark and musty cave. Sunlight pours in from a passage to the south." (Map.fromList [(South, "start")]))
           ]
 
+combinations :: Int -> [a] -> [[a]]
+combinations 0 _ = [[]]
+combinations _ [] = []
+combinations n (x:xs) = (map (x:) (combinations (n-1) xs)) ++ (combinations n xs)
+
 g_itemMap = Map.fromList
           [("pedestal", Item ["pedestal"] [] "pedestal" [Fixed] "cave")
           ,("skull", Item ["skull"] ["gold"] "gold skull" [] "cave")
           ,("table", Item ["table"] ["small"] "A small kitchen table" [Bulky] "cave")
           ,("largeSandbag", Item ["sandbag", "bag"] ["large"] "A large bag of sand" [Bulky] "cave")
-          ,("smallSandbag", Item ["sandbag", "bag"] ["small"] "A small bag of sand" [] "cave")
-          ,("knife", Item ["knife"] ["large"] "A large kitchen kife" [] "table")
+          ,("smallSandbag1", Item ["sandbag", "bag"] ["small", "red"] "A small red bag of sand" [] "cave")
+          ,("smallSandbag2", Item ["sandbag", "bag"] ["small", "blue"] "A small blue bag of sand" [] "cave")
+          ,("Knife", Item ["knife"] ["large"] "A large kitchen kife" [] "table")
           ]
 
 wrap :: Int -> String -> String
@@ -85,13 +93,20 @@ wrap width str =
     else let chop = words $ take width str
              len = length chop
              pre = (unwords $ take (len - 1) chop) in
-          pre ++ "\n" ++ (wrap width $ dropWhile isSpace $ drop (length pre) str)
+          pre ++ "\n" ++ (wrap width $ dropWhile Char.isSpace $ drop (length pre) str)
 
 lookupItem :: ItemName -> Item
 lookupItem name = maybe (error $ "missing item " ++ name) id $ Map.lookup name g_itemMap
 
 lookupRoom :: RoomName -> Room
 lookupRoom name = maybe (error $ "missing room " ++ name) id $ Map.lookup name g_roomMap
+
+getItemDescriptions :: Item -> [String]
+getItemDescriptions item = adjectPhrase
+    where adjectPhrase = List.map (List.intercalate " ") $ List.concatMap
+                         genComb [1..(length adjects)]
+          adjects = adjectives item
+          genComb n = combinations n adjects
 
 getItemsFromRoom :: WorldState -> RoomName -> [Item]
 getItemsFromRoom ws roomName = map lookupItem itemNames
@@ -137,14 +152,11 @@ translateCommand :: Aliases -> String -> String
 translateCommand aliases cmd = maybe cmd id $ Map.lookup cmd aliases
 
 parseItemName :: WorldState -> [Word] -> ItemName
-parseItemName ws itemDesc = items
-
--- something that matches itemDesc to a the itemName from the item (both stripped of leading & trailing whitespace case insensitive)
-
-itemName item
-
-    where currentRoomName = currentRoom $ playerInfo ws
-          items = getItemsFromRoom ws currentRoomName
+parseItemName ws itemDesc = undefined
+-- parseItemName ws itemDesc = maybe (error $ "unknown item") id $ List.find matches $ map itemName items
+--     where currentRoomName = currentRoom $ playerInfo ws
+--           items = getItemsFromRoom ws currentRoomName
+--           matches name = Text.strip name == Text.strip itemDesc
 
 parseCommand :: WorldState -> String -> Verb
 parseCommand ws cmdline =
@@ -155,7 +167,7 @@ parseCommand ws cmdline =
       "look" -> Look
       ":j" -> Skip $ head rest
       "quit" -> Quit
-      "examine" -> Examine rest
+      "examine" -> Examine $ head rest
       _ -> Error $ "Unrecognized command " ++ cmd
     where wordList = words $ map Char.toLower (translateCommand (aliases ws) cmdline)
           cmd = head wordList
@@ -205,7 +217,7 @@ parseLine ws cmdline = case parseCommand ws cmdline of
                                     Just roomName -> goToRoom ws roomName
                                     Nothing -> (ws, Just "Can't go that direction")
                         Skip roomName -> goToRoom ws roomName
-                        Examine itemName -> (ws, Just $ "It looks like a " ++ List.intercalate " " itemName)
+                        Examine itemName -> (ws, Just $ "It looks like a " ++ itemName) -- List.intercalate " " itemName)
                         Get itemName -> tryPickupItem ws itemName
                         Inventory -> showInventory ws
                         Quit -> error "done"
