@@ -102,11 +102,13 @@ lookupRoom :: RoomName -> Room
 lookupRoom name = maybe (error $ "missing room " ++ name) id $ Map.lookup name g_roomMap
 
 getItemDescriptions :: Item -> [String]
-getItemDescriptions item = adjectPhrase
-    where adjectPhrase = List.map (List.intercalate " ") $ List.concatMap
+getItemDescriptions item = [ a ++ " " ++ n | a <- adjectPhrases, n <- nounPhrases ]
+    where adjectPhrases = List.map (List.intercalate " ") $ List.concatMap
                          genComb [1..(length adjects)]
+          nounPhrases = nouns item
           adjects = adjectives item
           genComb n = combinations n adjects
+
 
 getItemsFromRoom :: WorldState -> RoomName -> [Item]
 getItemsFromRoom ws roomName = map lookupItem itemNames
@@ -153,10 +155,10 @@ translateCommand aliases cmd = maybe cmd id $ Map.lookup cmd aliases
 
 parseItemName :: WorldState -> [Word] -> ItemName
 parseItemName ws itemDesc = undefined
--- parseItemName ws itemDesc = maybe (error $ "unknown item") id $ List.find matches $ map itemName items
---     where currentRoomName = currentRoom $ playerInfo ws
---           items = getItemsFromRoom ws currentRoomName
---           matches name = Text.strip name == Text.strip itemDesc
+-- parseItemName ws itemDesc = maybe (error $ "unknown item") id $ List.find matches $ map getItemDescriptions items
+--      where currentRoomName = currentRoom $ playerInfo ws
+--            items = getItemsFromRoom ws currentRoomName
+--            matches name = name == itemDesc
 
 parseCommand :: WorldState -> String -> Verb
 parseCommand ws cmdline =
