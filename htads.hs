@@ -16,11 +16,12 @@ import Alias
 type Word = String
 type RoomName = Word
 type ItemName = Word
+type ItemDesc = String
 
 data Compass = North | NorthEast | East | SouthEast | South | SouthWest | West | NorthWest
                deriving (Ord, Eq, Show, Read)
 
-data Verb = Look | Go Compass | Examine ItemName | Get ItemName | Inventory | Quit | Skip RoomName | Error String
+data Verb = Look | Go Compass | Examine ItemDesc | Get ItemDesc | Inventory | Quit | Skip RoomName | Error String
             deriving (Show)
 
 data ItemAttribute = Fixed | Bulky
@@ -36,12 +37,13 @@ data Room = Room {
     } deriving (Show)
 
 data Item = Item {
-      nouns :: [Word]
-    , adjectives :: [Word]
-    , itemDescription :: String
-    , itemAttributes :: [ItemAttribute]
-    , startLocation :: String
-      } deriving (Show)
+  itemId :: Word
+  , nouns :: [Word]
+  , adjectives :: [Word]
+  , itemDescription :: String
+  , itemAttributes :: [ItemAttribute]
+  , startLocation :: String
+  } deriving (Show)
 
 itemName :: Item -> ItemName
 itemName item = Text.unpack $ Text.strip $ Text.pack $ List.intercalate " " [adjective, noun]
@@ -77,13 +79,13 @@ combinations _ [] = []
 combinations n (x:xs) = (map (x:) (combinations (n-1) xs)) ++ (combinations n xs)
 
 g_itemMap = Map.fromList
-          [("pedestal", Item ["pedestal"] [] "pedestal" [Fixed] "cave")
-          ,("skull", Item ["skull"] ["gold"] "gold skull" [] "cave")
-          ,("table", Item ["table"] ["small"] "A small kitchen table" [Bulky] "cave")
-          ,("largeSandbag", Item ["sandbag", "bag"] ["large"] "A large bag of sand" [Bulky] "cave")
-          ,("smallSandbag1", Item ["sandbag", "bag"] ["small", "red"] "A small red bag of sand" [] "cave")
-          ,("smallSandbag2", Item ["sandbag", "bag"] ["small", "blue"] "A small blue bag of sand" [] "cave")
-          ,("Knife", Item ["knife"] ["large"] "A large kitchen kife" [] "table")
+          [("pedestal", Item "pedestal" ["pedestal"] [] "pedestal" [Fixed] "cave")
+          ,("skull", Item "skull" ["skull"] ["gold"] "gold skull" [] "cave")
+          ,("table", Item "table" ["table"] ["small"] "A small kitchen table" [Bulky] "cave")
+          ,("largeSandbag", Item "largeSandbag" ["sandbag", "bag"] ["large"] "A large bag of sand" [Bulky] "cave")
+          ,("smallSandbag1", Item "smallSandbag1" ["sandbag", "bag"] ["small", "red"] "A small red bag of sand" [] "cave")
+          ,("smallSandbag2", Item "smallSandbag2" ["sandbag", "bag"] ["small", "blue"] "A small blue bag of sand" [] "cave")
+          ,("knife", Item "knife" ["knife"] ["large"] "A large kitchen kife" [] "table")
           ]
 
 wrap :: Int -> String -> String
@@ -153,27 +155,25 @@ parseCompass dir = case unAbbrevCompass dir of
 translateCommand :: Aliases -> String -> String
 translateCommand aliases cmd = maybe cmd id $ Map.lookup cmd aliases
 
-parseItemName :: WorldState -> [Word] -> ItemName
-parseItemName ws itemDesc = undefined
--- parseItemName ws itemDesc = maybe (error $ "unknown item") id $ List.find matches $ map getItemDescriptions items
---      where currentRoomName = currentRoom $ playerInfo ws
---            items = getItemsFromRoom ws currentRoomName
---            matches name = name == itemDesc
+itemByDesc :: [Item] -> String -> Maybe Item
+itemByDesc items itemDesc = List.find matches items
+    where matches item = itemDesc `elem` getItemDescriptions item
 
 parseCommand :: WorldState -> String -> Verb
 parseCommand ws cmdline =
     case cmd of
       "go" -> maybe (Error $ "Unrecognized direction " ++ head rest) Go $ parseCompass $ head rest
-      "get" -> Get $ parseItemName ws rest
+      "get" -> Get restStr
       "inventory" -> Inventory
       "look" -> Look
       ":j" -> Skip $ head rest
       "quit" -> Quit
-      "examine" -> Examine $ head rest
+      "examine" -> Examine restStr
       _ -> Error $ "Unrecognized command " ++ cmd
     where wordList = words $ map Char.toLower (translateCommand (aliases ws) cmdline)
           cmd = head wordList
           rest = tail wordList
+          restStr = List.intercalate " " rest
 
 combineVisitedRooms :: RoomName -> [RoomName] -> [RoomName]
 combineVisitedRooms name nameList =
@@ -191,22 +191,23 @@ goToRoom ws roomName =
     (ws { playerInfo = pi }, Just msg)
     where newRoom = lookupRoom roomName
 
-tryPickupItem :: WorldState -> ItemName -> (WorldState, Maybe String)
-tryPickupItem ws itemName =
-    case List.find itemMatches items of
+tryPickupItem :: WorldState -> ItemDesc -> (WorldState, Maybe String)
+tryPickupItem ws itemDesc =
+    case maybeItem of
       Just item -> let pi = (playerInfo ws)
-                       newPi = pi { inventory = itemName : (inventory pi) }
+                       newPi = pi { inventory = name : (inventory pi) }
                        newIm = Map.update removeItem roomName (itemMap ws) in
                    (ws { playerInfo = newPi,
                          itemMap = newIm
-                       }, Just $ itemName ++ " picked up." )
-      Nothing -> (ws, Just $ "There is no " ++ itemName ++ " here.")
+                       }, Just $ name ++ " picked up." )
+                   where removeItem itemList = Just $ List.delete name itemList
+                         name = itemName item
+      Nothing -> (ws, Just $ "There is no " ++ itemDesc ++ " here.")
     where roomName = currentRoom (playerInfo ws)
           items = case Map.lookup roomName $ itemMap ws of
-                    Just lst -> lst
+                    Just lst -> map lookupItem lst
                     Nothing -> []
-          itemMatches item = item == itemName
-          removeItem itemList = Just $ List.delete itemName itemList
+          maybeItem = itemByDesc items itemDesc
 
 showInventory :: WorldState -> (WorldState, Maybe String)
 showInventory ws = let pi = (playerInfo ws) in
@@ -219,8 +220,8 @@ parseLine ws cmdline = case parseCommand ws cmdline of
                                     Just roomName -> goToRoom ws roomName
                                     Nothing -> (ws, Just "Can't go that direction")
                         Skip roomName -> goToRoom ws roomName
-                        Examine itemName -> (ws, Just $ "It looks like a " ++ itemName) -- List.intercalate " " itemName)
-                        Get itemName -> tryPickupItem ws itemName
+                        Examine itemDesc -> (ws, Just $ "It looks like a " ++ itemDesc)
+                        Get itemDesc -> tryPickupItem ws itemDesc
                         Inventory -> showInventory ws
                         Quit -> error "done"
                         Error msg -> (ws, Just msg)
