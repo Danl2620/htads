@@ -16,6 +16,7 @@ import Alias
 type Word = String
 type RoomName = Word
 type ItemName = Word
+
 type ItemDesc = String
 
 data Compass = North | NorthEast | East | SouthEast | South | SouthWest | West | NorthWest
@@ -46,13 +47,11 @@ data Item = Item {
   } deriving (Show)
 
 itemName :: Item -> ItemName
-itemName item = Text.unpack $ Text.strip $ Text.pack $ List.intercalate " " [adjective, noun]
-                where adjective = if null $ adjectives item
+itemName item = Text.unpack $ Text.strip $ Text.pack $ adjs ++ " " ++ noun
+                where adjs = if null $ adjectives item
                                   then ""
-                                  else head $ adjectives item
-                      noun = if null $ nouns item
-                             then ""
-                             else head $ nouns item
+                                  else List.intercalate " " $ adjectives item
+                      noun = head $ nouns item
 
 data PlayerInfo = PlayerInfo {
       currentRoom :: RoomName
@@ -88,14 +87,16 @@ g_itemMap = Map.fromList
           ,("knife", Item "knife" ["knife"] ["large"] "A large kitchen kife" [] "table")
           ]
 
+
 wrap :: Int -> String -> String
-wrap width str =
-    if length str <= width
-    then str
-    else let chop = words $ take width str
-             len = length chop
-             pre = (unwords $ take (len - 1) chop) in
-          pre ++ "\n" ++ (wrap width $ dropWhile Char.isSpace $ drop (length pre) str)
+wrap width fullStr =
+    unlines $ map wrapStr (lines fullStr)
+    where wrapStr str = if length str <= width
+                        then str
+                        else let chop = words $ take width str
+                                 len = length chop
+                                 pre = (unwords $ take (len - 1) chop) in
+                             pre ++ "\n" ++ (wrap width $ dropWhile Char.isSpace $ drop (length pre) str)
 
 lookupItem :: ItemName -> Item
 lookupItem name = maybe (error $ "missing item " ++ name) id $ Map.lookup name g_itemMap
@@ -120,15 +121,12 @@ getItemsFromRoom ws roomName = map lookupItem itemNames
 
 getRoomDescription :: WorldState -> RoomName -> String
 getRoomDescription ws roomName =
-    "\n_" ++ (summary room) ++ "_\n" ++ wrap 60 (description room) ++ itemDesc
+    "\n_" ++ (summary room) ++ "_\n" ++ (description room) ++ "\n" ++ itemDesc
     where room = lookupRoom roomName
           items = getItemsFromRoom ws roomName
           itemDesc = if null items
-                     then "\n"
-                     else "\n\nYou see a " ++ List.intercalate ", a " (map itemName items) ++ ".\n"
---           itemDesc = if null items
---                      then ""
---                      else "\n\nContains:\n" ++ concatMap (\item -> "\tA " ++ item ++ "\n") items
+                     then ""
+                     else "You see a " ++ List.intercalate ", a " (map itemName items) ++ "."
 
 unAbbrevCompass "n" = "north"
 unAbbrevCompass "ne" = "northeast"
@@ -200,7 +198,7 @@ tryPickupItem ws itemDesc =
                    (ws { playerInfo = newPi,
                          itemMap = newIm
                        }, Just $ name ++ " picked up." )
-                   where removeItem itemList = Just $ List.delete name itemList
+                   where removeItem itemList = Just $ List.delete (itemId item) itemList
                          name = itemName item
       Nothing -> (ws, Just $ "There is no " ++ itemDesc ++ " here.")
     where roomName = currentRoom (playerInfo ws)
@@ -234,7 +232,7 @@ flushStr str = putStr str >> hFlush stdout
 eval :: WorldState -> String -> IO WorldState
 eval ws cmd = do let (newWorldState, maybeMsg) = parseLine ws cmd
                  case maybeMsg of
-                   Just msg -> putStrLn $ msg
+                   Just msg -> putStrLn $ wrap 60 msg
                    Nothing -> putStrLn ""
                  flushStr "> "
                  inpStr <- getLine
