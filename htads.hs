@@ -105,7 +105,7 @@ lookupRoom :: RoomName -> Room
 lookupRoom name = maybe (error $ "missing room " ++ name) id $ Map.lookup name g_roomMap
 
 getItemDescriptions :: Item -> [String]
-getItemDescriptions item = [ a ++ " " ++ n | a <- adjectPhrases, n <- nounPhrases ]
+getItemDescriptions item = [ a ++ " " ++ n | a <- adjectPhrases, n <- nounPhrases ] ++ nounPhrases
     where adjectPhrases = List.map (List.intercalate " ") $ List.concatMap
                          genComb [1..(length adjects)]
           nounPhrases = nouns item
