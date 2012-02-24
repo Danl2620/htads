@@ -1,4 +1,4 @@
-module Htads where
+module Main where
 
 import System.IO
 import qualified Data.Char as Char
@@ -25,7 +25,7 @@ data Compass = North | NorthEast | East | SouthEast | South | SouthWest | West |
 data Verb = Look | Go Compass | Examine ItemDesc | Get ItemDesc | Inventory | Quit | Skip RoomName | Error String
             deriving (Show)
 
-data ItemAttribute = Fixed | Bulky
+data ItemAttribute = Fixed | Bulky | Score Int
                      deriving (Show)
 
 type Connection = Map.Map Compass String
@@ -79,7 +79,7 @@ combinations n (x:xs) = (map (x:) (combinations (n-1) xs)) ++ (combinations n xs
 
 g_itemMap = Map.fromList
           [("pedestal", Item "pedestal" ["pedestal"] [] "pedestal" [Fixed] "cave")
-          ,("skull", Item "skull" ["skull"] ["gold"] "gold skull" [] "cave")
+          ,("skull", Item "skull" ["skull"] ["gold"] "gold skull" [Score 10] "cave")
           ,("table", Item "table" ["table"] ["small"] "A small kitchen table" [Bulky] "cave")
           ,("largeSandbag", Item "largeSandbag" ["sandbag", "bag"] ["large"] "A large bag of sand" [Bulky] "cave")
           ,("smallSandbag1", Item "smallSandbag1" ["sandbag", "bag"] ["small", "red"] "A small red bag of sand" [] "cave")
@@ -242,6 +242,7 @@ generateWorldItemMap :: Map.Map ItemName Item -> Map.Map RoomName [ItemName]
 generateWorldItemMap itemMap =
     Map.fromListWith (++) $ map (\pair -> (startLocation $ snd pair, [fst pair])) $ Map.assocs itemMap
 
+main :: IO ()
 main =
     do h <- openFile "aliases.txt" ReadMode
        c <- hGetContents h
@@ -249,7 +250,13 @@ main =
                         Left e -> Map.empty
                         Right r -> Map.fromList r
            ws = WorldState (PlayerInfo "<none>" [] []) (generateWorldItemMap g_itemMap) aliasMap
-       eval ws ":j start"
+       ws <- eval ws ":j start"
+       putStrLn $ "Finished with score " ++ show 0
+       -- putStrLn "Finished with score " ++ score
+       --   where score = let pi = (playerInfo ws) in
+       --           sum $ map extractScore (inventory pi)
+       --           where extractScore item = itemAttributes
+
 
 
 Nothing >>? _ = Nothing
