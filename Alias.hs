@@ -1,4 +1,4 @@
-module Alias (parseAliases) where 
+module Alias (parseAliases) where
 
 import Control.Monad
 import Text.ParserCombinators.Parsec
@@ -19,7 +19,7 @@ cmdContents = many (noneOf "= ,\n\r")
 -- cmdContents = sepBy cell (char '=')
 bindingContents = quotedCell <|> many (noneOf "=,\n\r")
 
-quotedCell = 
+quotedCell =
     do char '"'
        content <- many quotedChar
        char '"' <?> "quote at end of cell"
@@ -38,10 +38,3 @@ eol =   try (string "\n\r")
 parseAliases :: String -> Either ParseError [(String, String)]
 parseAliases input = parse aliasFile "alias" input
 
--- main =
---     do c <- getContents
---        print $ case parseAliases c of
---                  Left e -> "Error parsing input:" ++ show e
---                  Right r -> show $ Map.fromList r
-
--- $ case parse csvFile "alias" c of

@@ -10,7 +10,6 @@ import Alias
 
 -- string with no whitespace:
 -- newtype NoWhitespace = NoWhitespace String; toString (NoWhitespace s) = s; fromString s | all (not . isSpace) s = NoWhiteSpace s | otherwise = error "no"
-
 -- strip = reverse . dropWhile isSpace . reverse . dropWhile isSpace
 
 type Word = String
@@ -59,12 +58,6 @@ data PlayerInfo = PlayerInfo {
     , inventory :: [ItemName]
       } deriving (Show)
 
-data WorldState = WorldState {
-      playerInfo :: PlayerInfo
-    , itemMap :: Map.Map RoomName [ItemName]
-    , aliases :: Aliases
-    } deriving (Show)
-
 g_nullRoom = Room "<none>" "<none>" Map.empty
 
 g_roomMap = Map.fromList
@@ -104,6 +97,10 @@ lookupItem name = maybe (error $ "missing item " ++ name) id $ Map.lookup name g
 lookupRoom :: RoomName -> Room
 lookupRoom name = maybe (error $ "missing room " ++ name) id $ Map.lookup name g_roomMap
 
+generateWorldItemMap :: Map.Map ItemName Item -> Map.Map RoomName [ItemName]
+generateWorldItemMap itemMap =
+    Map.fromListWith (++) $ map (\pair -> (startLocation $ snd pair, [fst pair])) $ Map.assocs itemMap
+
 getItemDescriptions :: Item -> [String]
 getItemDescriptions item = [ a ++ " " ++ n | a <- adjectPhrases, n <- nounPhrases ] ++ nounPhrases
     where adjectPhrases = List.map (List.intercalate " ") $ List.concatMap
@@ -113,11 +110,28 @@ getItemDescriptions item = [ a ++ " " ++ n | a <- adjectPhrases, n <- nounPhrase
           genComb n = combinations n adjects
 
 
+itemByDesc :: [Item] -> String -> Maybe Item
+itemByDesc items itemDesc = List.find matches items
+    where matches item = itemDesc `elem` getItemDescriptions item
+
+combineVisitedRooms :: RoomName -> [RoomName] -> [RoomName]
+combineVisitedRooms name nameList =
+    if name `elem` nameList
+       then nameList
+       else name : nameList
+
+
+data WorldState = WorldState {
+      playerInfo :: PlayerInfo
+    , itemMap :: Map.Map RoomName [ItemName]
+    , aliases :: Aliases
+    } deriving (Show)
+
+
 getItemsFromRoom :: WorldState -> RoomName -> [Item]
 getItemsFromRoom ws roomName = map lookupItem itemNames
     where itemNames = maybe [] id $ Map.lookup roomName $ itemMap ws
 
--- maybe [] (map (\name -> maybe (error "missing item " ++ name) id $ Map.lookup name g_itemMap)) id $ Map.lookup roomName $ itemMap ws
 
 getRoomDescription :: WorldState -> RoomName -> String
 getRoomDescription ws roomName =
@@ -150,13 +164,6 @@ parseCompass dir = case unAbbrevCompass dir of
                      "southwest" -> Just SouthWest
                      _ -> Nothing
 
-translateCommand :: Aliases -> String -> String
-translateCommand aliases cmd = maybe cmd id $ Map.lookup cmd aliases
-
-itemByDesc :: [Item] -> String -> Maybe Item
-itemByDesc items itemDesc = List.find matches items
-    where matches item = itemDesc `elem` getItemDescriptions item
-
 parseCommand :: WorldState -> String -> Verb
 parseCommand ws cmdline =
     case cmd of
@@ -172,13 +179,9 @@ parseCommand ws cmdline =
           cmd = head wordList
           rest = tail wordList
           restStr = List.intercalate " " rest
+          translateCommand aliases cmd = maybe cmd id $ Map.lookup cmd aliases
 
-combineVisitedRooms :: RoomName -> [RoomName] -> [RoomName]
-combineVisitedRooms name nameList =
-    if name `elem` nameList
-       then nameList
-       else name : nameList
-
+goToRoom :: WorldState -> RoomName -> (WorldState, Maybe String)
 goToRoom ws roomName =
     let oldPi = (playerInfo ws)
         pi = oldPi { currentRoom = roomName
@@ -238,10 +241,6 @@ eval ws cmd = do let (newWorldState, maybeMsg) = parseLine ws cmd
                  inpStr <- getLine
                  eval newWorldState inpStr
 
-generateWorldItemMap :: Map.Map ItemName Item -> Map.Map RoomName [ItemName]
-generateWorldItemMap itemMap =
-    Map.fromListWith (++) $ map (\pair -> (startLocation $ snd pair, [fst pair])) $ Map.assocs itemMap
-
 main :: IO ()
 main =
     do h <- openFile "aliases.txt" ReadMode
@@ -256,8 +255,3 @@ main =
        --   where score = let pi = (playerInfo ws) in
        --           sum $ map extractScore (inventory pi)
        --           where extractScore item = itemAttributes
-
-
-
-Nothing >>? _ = Nothing
-Just v  >>? f = f v
