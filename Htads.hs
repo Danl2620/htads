@@ -7,6 +7,7 @@ import qualified Data.List as List
 import qualified Data.Text as Text
 
 import Alias
+import qualified Util as U
 
 -- string with no whitespace:
 -- newtype NoWhitespace = NoWhitespace String; toString (NoWhitespace s) = s; fromString s | all (not . isSpace) s = NoWhiteSpace s | otherwise = error "no"
@@ -15,7 +16,6 @@ import Alias
 type Word = String
 type RoomName = Word
 type ItemName = Word
-
 type ItemDesc = String
 
 data Compass = North | NorthEast | East | SouthEast | South | SouthWest | West | NorthWest
@@ -60,16 +60,13 @@ data PlayerInfo = PlayerInfo {
 
 g_nullRoom = Room "<none>" "<none>" Map.empty
 
+g_roomMap :: Data.Map.Map RoomName Room
 g_roomMap = Map.fromList
           [("start", Room "Outside cave" "You're standing in the bright sunlight just outside of a large, dark, foreboding cave, which lies to the north. " (Map.fromList [(North, "cave")]))
           ,("cave", Room "Cave" "You're inside a dark and musty cave. Sunlight pours in from a passage to the south." (Map.fromList [(South, "start")]))
           ]
 
-combinations :: Int -> [a] -> [[a]]
-combinations 0 _ = [[]]
-combinations _ [] = []
-combinations n (x:xs) = (map (x:) (combinations (n-1) xs)) ++ (combinations n xs)
-
+g_itemMap :: Data.Map.Map Word Item
 g_itemMap = Map.fromList
           [("pedestal", Item "pedestal" ["pedestal"] [] "pedestal" [Fixed] "cave")
           ,("skull", Item "skull" ["skull"] ["gold"] "gold skull" [Score 10] "cave")
@@ -79,17 +76,6 @@ g_itemMap = Map.fromList
           ,("smallSandbag2", Item "smallSandbag2" ["sandbag", "bag"] ["small", "blue"] "A small blue bag of sand" [] "cave")
           ,("knife", Item "knife" ["knife"] ["large"] "A large kitchen kife" [] "table")
           ]
-
-
-wrap :: Int -> String -> String
-wrap width fullStr =
-    unlines $ map wrapStr (lines fullStr)
-    where wrapStr str = if length str <= width
-                        then str
-                        else let chop = words $ take width str
-                                 len = length chop
-                                 pre = (unwords $ take (len - 1) chop) in
-                             pre ++ "\n" ++ (wrap width $ dropWhile Char.isSpace $ drop (length pre) str)
 
 lookupItem :: ItemName -> Item
 lookupItem name = maybe (error $ "missing item " ++ name) id $ Map.lookup name g_itemMap
@@ -107,7 +93,7 @@ getItemDescriptions item = [ a ++ " " ++ n | a <- adjectPhrases, n <- nounPhrase
                          genComb [1..(length adjects)]
           nounPhrases = nouns item
           adjects = adjectives item
-          genComb n = combinations n adjects
+          genComb n = U.combinations n adjects
 
 
 itemByDesc :: [Item] -> String -> Maybe Item
@@ -235,7 +221,7 @@ flushStr str = putStr str >> hFlush stdout
 eval :: WorldState -> String -> IO WorldState
 eval ws cmd = do let (newWorldState, maybeMsg) = parseLine ws cmd
                  case maybeMsg of
-                   Just msg -> putStrLn $ wrap 60 msg
+                   Just msg -> putStrLn $ U.wrap 60 msg
                    Nothing -> putStrLn ""
                  flushStr "> "
                  inpStr <- getLine
