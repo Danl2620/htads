@@ -1,4 +1,4 @@
-module Main where
+module Htads where
 
 import System.IO
 import qualified Data.Char as Char
@@ -28,7 +28,7 @@ data ItemAttribute = Fixed | Bulky | Score Int
                      deriving (Show)
 
 type Connection = Map.Map Compass String
-type Aliases = Map.Map String String
+type AliasMap = Map.Map String String
 
 data Room = Room {
       summary :: RoomName
@@ -58,34 +58,20 @@ data PlayerInfo = PlayerInfo {
     , inventory :: [ItemName]
       } deriving (Show)
 
-g_nullRoom = Room "<none>" "<none>" Map.empty
+type RoomMap = Map.Map RoomName Room
+type ItemMap = Map.Map Word Item
 
-g_roomMap :: Data.Map.Map RoomName Room
-g_roomMap = Map.fromList
-          [("start", Room "Outside cave" "You're standing in the bright sunlight just outside of a large, dark, foreboding cave, which lies to the north. " (Map.fromList [(North, "cave")]))
-          ,("cave", Room "Cave" "You're inside a dark and musty cave. Sunlight pours in from a passage to the south." (Map.fromList [(South, "start")]))
-          ]
 
-g_itemMap :: Data.Map.Map Word Item
-g_itemMap = Map.fromList
-          [("pedestal", Item "pedestal" ["pedestal"] [] "pedestal" [Fixed] "cave")
-          ,("skull", Item "skull" ["skull"] ["gold"] "gold skull" [Score 10] "cave")
-          ,("table", Item "table" ["table"] ["small"] "A small kitchen table" [Bulky] "cave")
-          ,("largeSandbag", Item "largeSandbag" ["sandbag", "bag"] ["large"] "A large bag of sand" [Bulky] "cave")
-          ,("smallSandbag1", Item "smallSandbag1" ["sandbag", "bag"] ["small", "red"] "A small red bag of sand" [] "cave")
-          ,("smallSandbag2", Item "smallSandbag2" ["sandbag", "bag"] ["small", "blue"] "A small blue bag of sand" [] "cave")
-          ,("knife", Item "knife" ["knife"] ["large"] "A large kitchen kife" [] "table")
-          ]
+data WorldDefinition = WorldDefinition {
+  roomMap :: RoomMap
+  , itemMap :: ItemMap
+  } deriving (Show)
 
-lookupItem :: ItemName -> Item
-lookupItem name = maybe (error $ "missing item " ++ name) id $ Map.lookup name g_itemMap
+lookupItem :: WorldDefinition -> ItemName -> Item
+lookupItem wd name = maybe (error $ "missing item " ++ name) id $ Map.lookup name $ itemMap wd
 
-lookupRoom :: RoomName -> Room
-lookupRoom name = maybe (error $ "missing room " ++ name) id $ Map.lookup name g_roomMap
-
-generateWorldItemMap :: Map.Map ItemName Item -> Map.Map RoomName [ItemName]
-generateWorldItemMap itemMap =
-    Map.fromListWith (++) $ map (\pair -> (startLocation $ snd pair, [fst pair])) $ Map.assocs itemMap
+lookupRoom :: WorldDefinition -> RoomName -> Room
+lookupRoom wd name = maybe (error $ "missing room " ++ name) id $ Map.lookup name $ roomMap wd
 
 getItemDescriptions :: Item -> [String]
 getItemDescriptions item = [ a ++ " " ++ n | a <- adjectPhrases, n <- nounPhrases ] ++ nounPhrases
@@ -108,21 +94,29 @@ combineVisitedRooms name nameList =
 
 
 data WorldState = WorldState {
-      playerInfo :: PlayerInfo
-    , itemMap :: Map.Map RoomName [ItemName]
-    , aliases :: Aliases
-    } deriving (Show)
+  worldDefinition :: WorldDefinition
+  , playerInfo :: PlayerInfo
+  , roomItemMap :: Map.Map RoomName [ItemName]
+  , aliases :: AliasMap
+  } deriving (Show)
+
+makeWorldState :: WorldDefinition -> AliasMap -> WorldState
+makeWorldState wd aliasMap = WorldState wd (PlayerInfo "<none>" [] []) (generateWorldItemMap wd) aliasMap
+  where
+    -- generateWorldItemMap :: WorldDefinition -> Map.Map RoomName [ItemName]
+    generateWorldItemMap wd =
+      Map.fromListWith (++) $ map (\pair -> (startLocation $ snd pair, [fst pair])) $ Map.assocs $ itemMap wd
 
 
 getItemsFromRoom :: WorldState -> RoomName -> [Item]
-getItemsFromRoom ws roomName = map lookupItem itemNames
-    where itemNames = maybe [] id $ Map.lookup roomName $ itemMap ws
+getItemsFromRoom ws roomName = map (lookupItem $ worldDefinition ws) itemNames
+    where itemNames = maybe [] id $ Map.lookup roomName $ roomItemMap ws
 
 
 getRoomDescription :: WorldState -> RoomName -> String
 getRoomDescription ws roomName =
     "\n_" ++ (summary room) ++ "_\n" ++ (description room) ++ "\n" ++ itemDesc
-    where room = lookupRoom roomName
+    where room = lookupRoom (worldDefinition ws) roomName
           items = getItemsFromRoom ws roomName
           itemDesc = if null items
                      then ""
@@ -176,23 +170,23 @@ goToRoom ws roomName =
               then summary newRoom
               else getRoomDescription ws roomName in
     (ws { playerInfo = pi }, Just msg)
-    where newRoom = lookupRoom roomName
+    where newRoom = lookupRoom (worldDefinition ws) roomName
 
 tryPickupItem :: WorldState -> ItemDesc -> (WorldState, Maybe String)
 tryPickupItem ws itemDesc =
     case maybeItem of
       Just item -> let pi = (playerInfo ws)
                        newPi = pi { inventory = name : (inventory pi) }
-                       newIm = Map.update removeItem roomName (itemMap ws) in
+                       newIm = Map.update removeItem roomName (roomItemMap ws) in
                    (ws { playerInfo = newPi,
-                         itemMap = newIm
+                         roomItemMap = newIm
                        }, Just $ name ++ " picked up." )
                    where removeItem itemList = Just $ List.delete (itemId item) itemList
                          name = itemName item
       Nothing -> (ws, Just $ "There is no " ++ itemDesc ++ " here.")
     where roomName = currentRoom (playerInfo ws)
-          items = case Map.lookup roomName $ itemMap ws of
-                    Just lst -> map lookupItem lst
+          items = case Map.lookup roomName $ roomItemMap ws of
+                    Just lst -> map (lookupItem $ worldDefinition ws) lst
                     Nothing -> []
           maybeItem = itemByDesc items itemDesc
 
@@ -213,7 +207,7 @@ parseLine ws cmdline = case parseCommand ws cmdline of
                         Quit -> error "done"
                         Error msg -> (ws, Just msg)
                       where roomName = currentRoom $ playerInfo ws
-                            room = lookupRoom roomName
+                            room = lookupRoom (worldDefinition ws) roomName
 
 flushStr :: String -> IO ()
 flushStr str = putStr str >> hFlush stdout
@@ -227,17 +221,8 @@ eval ws cmd = do let (newWorldState, maybeMsg) = parseLine ws cmd
                  inpStr <- getLine
                  eval newWorldState inpStr
 
-main :: IO ()
-main =
-    do h <- openFile "aliases.txt" ReadMode
-       c <- hGetContents h
-       let aliasMap = case parseAliases c of
-                        Left e -> Map.empty
-                        Right r -> Map.fromList r
-           ws = WorldState (PlayerInfo "<none>" [] []) (generateWorldItemMap g_itemMap) aliasMap
-       ws <- eval ws ":j start"
-       putStrLn $ "Finished with score " ++ show 0
-       -- putStrLn "Finished with score " ++ score
-       --   where score = let pi = (playerInfo ws) in
-       --           sum $ map extractScore (inventory pi)
-       --           where extractScore item = itemAttributes
+runAdventure :: RoomMap -> ItemMap -> AliasMap -> IO ()
+runAdventure roomMap itemMap aliasMap =
+  do let ws = makeWorldState (WorldDefinition roomMap itemMap) aliasMap
+     ws <- eval ws ":j start"
+     putStrLn $ "Finished with score " ++ show 0
