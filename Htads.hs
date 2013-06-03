@@ -209,9 +209,6 @@ parseLine ws cmdline = case parseCommand ws cmdline of
                       where roomName = currentRoom $ playerInfo ws
                             room = lookupRoom (worldDefinition ws) roomName
 
-flushStr :: String -> IO ()
-flushStr str = putStr str >> hFlush stdout
-
 eval :: WorldState -> String -> IO WorldState
 eval ws cmd = do let (newWorldState, maybeMsg) = parseLine ws cmd
                  case maybeMsg of
@@ -220,6 +217,29 @@ eval ws cmd = do let (newWorldState, maybeMsg) = parseLine ws cmd
                  flushStr "> "
                  inpStr <- getLine
                  eval newWorldState inpStr
+
+flushStr :: String -> IO ()
+flushStr str = putStr str >> hFlush stdout
+
+-- readPrompt :: String ->	IO String
+-- readPrompt prompt = flushStr prompt >> getLine
+
+
+-- evalString :: WorldState -> String -> IO String
+-- evalString ws expr = return $ parseLine ws expr
+
+-- evalAndPrint :: WorldState -> String -> IO ()
+-- evalAndPrint ws expr = evalString ws expr >>= putStrLn
+
+-- until_ :: Monad m => (a -> Bool) -> m a -> (a -> m ()) -> m ()
+-- until_ pred prompt action = do
+--   result <- prompt
+--   if pred result
+--   then return ()
+--   else action result >> until_ pred prompt action
+
+-- runRepl :: IO ()
+-- runRepl = until_ (== "quit") (readPrompt "> ") evalAndPrint
 
 runAdventure :: RoomMap -> ItemMap -> AliasMap -> IO ()
 runAdventure roomMap itemMap aliasMap =
