@@ -211,25 +211,29 @@ eval ws cmd = do let (newWorldState, maybeMsg) = parseLine ws cmd
 flushStr :: String -> IO ()
 flushStr str = putStr str >> hFlush stdout
 
--- readPrompt :: String ->	IO String
--- readPrompt prompt = flushStr prompt >> getLine
+readPrompt :: String ->	IO String
+readPrompt prompt = flushStr prompt >> getLine
 
 
--- evalString :: WorldState -> String -> IO String
--- evalString ws expr = return $ parseLine ws expr
+evalString :: WorldState -> String -> IO (WorldState, Maybe String)
+evalString ws expr = return $ parseLine ws expr
 
--- evalAndPrint :: WorldState -> String -> IO ()
--- evalAndPrint ws expr = evalString ws expr >>= putStrLn
+evalAndPrint :: WorldState -> String -> IO (WorldState)
+evalAndPrint ws expr = do let (newWorldState, maybeMsg) = evalString ws expr
+                          case maybeMsg of
+                            Just msg -> putStrLn $ U.wrap 60 msg
+                            Nothing -> putStrLn "<nothing>"
+                          return newWorldState
 
--- until_ :: Monad m => (a -> Bool) -> m a -> (a -> m ()) -> m ()
--- until_ pred prompt action = do
---   result <- prompt
---   if pred result
---   then return ()
---   else action result >> until_ pred prompt action
+until_ :: Monad m => (a -> Bool) -> m a -> (a -> m (a)) -> m ()
+until_ pred prompt action = do
+  result <- prompt
+  if pred result
+  then return ()
+  else action result >> until_ pred prompt action
 
--- runRepl :: IO ()
--- runRepl = until_ (== "quit") (readPrompt "> ") evalAndPrint
+runRepl :: IO ()
+runRepl = until_ (== "quit") (readPrompt "> ") evalAndPrint
 
 runAdventure :: RoomMap -> ItemMap -> AliasMap -> IO ()
 runAdventure roomMap itemMap aliasMap =
