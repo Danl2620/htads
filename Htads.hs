@@ -122,18 +122,8 @@ getRoomDescription ws roomName =
                      then ""
                      else "You see a " ++ List.intercalate ", a " (map itemName items) ++ "."
 
-unAbbrevCompass "n" = "north"
-unAbbrevCompass "ne" = "northeast"
-unAbbrevCompass "s" = "south"
-unAbbrevCompass "e" = "east"
-unAbbrevCompass "w" = "west"
-unAbbrevCompass "nw" = "northwest"
-unAbbrevCompass "sw" = "southwest"
-unAbbrevCompass "se" = "southeast"
-unAbbrevCompass dir = dir
-
 parseCompass :: String -> Maybe Compass
-parseCompass dir = case unAbbrevCompass dir of
+parseCompass dir = case dir of
                      "north" -> Just North
                      "northeast" -> Just NorthEast
                      "northwest" -> Just NorthWest
