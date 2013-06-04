@@ -14,8 +14,8 @@ g_roomMap = Map.fromList
 
 g_itemMap :: ItemMap
 g_itemMap = Map.fromList
-          [("pedestal", Item "pedestal" ["pedestal"] [] "pedestal" [Fixed] "cave")
-          ,("skull", Item "skull" ["skull"] ["gold"] "gold skull" [Score 10] "cave")
+          [("pedestal", Item "pedestal" ["pedestal"] [] "A pedestal" [Fixed] "cave")
+          ,("skull", Item "skull" ["skull"] ["gold"] "A gold skull" [Score 10] "cave")
           ,("table", Item "table" ["table"] ["small"] "A small kitchen table" [Bulky] "cave")
           ,("largeSandbag", Item "largeSandbag" ["sandbag", "bag"] ["large"] "A large bag of sand" [Bulky] "cave")
           ,("smallSandbag1", Item "smallSandbag1" ["sandbag", "bag"] ["small", "red"] "A small red bag of sand" [] "cave")
@@ -25,13 +25,11 @@ g_itemMap = Map.fromList
 
 main :: IO ()
 main =
-    do h <- openFile "aliases.txt" ReadMode
-       c <- hGetContents h
-       let aliasMap = case parseAliases c of
-                        Left e -> Map.empty
-                        Right r -> Map.fromList r
-       runAdventure g_roomMap g_itemMap aliasMap
-       -- putStrLn "Finished with score " ++ score
-       --   where score = let pi = (playerInfo ws) in
-       --           sum $ map extractScore (inventory pi)
-       --           where extractScore item = itemAttributes
+  do h <- openFile "aliases.txt" ReadMode
+     c <- hGetContents h
+     let aliases = case parseAliases c of
+           Left e -> Map.empty
+           Right r -> Map.fromList r
+     endWs <- runAdventure g_roomMap g_itemMap aliases
+     let score = sum $ map (getItemScore . (lookupItem (worldDefinition endWs))) (inventory (playerInfo endWs))
+     putStrLn $ "Finished with score " ++ show score

@@ -81,6 +81,14 @@ getItemDescriptions item = [ a ++ " " ++ n | a <- adjectPhrases, n <- nounPhrase
           adjects = adjectives item
           genComb n = U.combinations n adjects
 
+getItemScore :: Item -> Int
+getItemScore item = maybe 0 exScore $ List.find isScore attrs
+    where attrs = itemAttributes item
+          isScore el = case el of
+                         Score _ -> True
+                         _ -> False
+          exScore (Score n) = n
+
 
 itemByDesc :: [Item] -> String -> Maybe Item
 itemByDesc items itemDesc = List.find matches items
@@ -166,13 +174,14 @@ tryPickupItem :: WorldState -> ItemDesc -> (WorldState, Maybe String)
 tryPickupItem ws itemDesc =
     case maybeItem of
       Just item -> let pi = (playerInfo ws)
-                       newPi = pi { inventory = name : (inventory pi) }
+                       newPi = pi { inventory = iId : (inventory pi) }
                        newIm = Map.update removeItem roomName (roomItemMap ws) in
                    (ws { playerInfo = newPi,
                          roomItemMap = newIm
                        }, Just $ name ++ " picked up." )
                    where removeItem itemList = Just $ List.delete (itemId item) itemList
                          name = itemName item
+                         iId = itemId item
       Nothing -> (ws, Just $ "There is no " ++ itemDesc ++ " here.")
     where roomName = currentRoom (playerInfo ws)
           items = case Map.lookup roomName $ roomItemMap ws of
@@ -181,8 +190,8 @@ tryPickupItem ws itemDesc =
           maybeItem = itemByDesc items itemDesc
 
 showInventory :: WorldState -> (WorldState, Maybe String)
-showInventory ws = let pi = (playerInfo ws) in
-                   (ws, Just $ "You are carrying:\n  " ++ List.intercalate "\n  " (inventory pi) )
+showInventory ws = (ws, Just $ "You are carrying:\n  " ++ List.intercalate "\n  " items )
+    where items = map (itemDescription . (lookupItem (worldDefinition ws))) (inventory (playerInfo ws))
 
 parseLine :: WorldState -> String -> (WorldState, Maybe String)
 parseLine ws cmdline = case parseCommand ws cmdline of
@@ -215,28 +224,30 @@ readPrompt :: String ->	IO String
 readPrompt prompt = flushStr prompt >> getLine
 
 
-evalString :: WorldState -> String -> IO (WorldState, Maybe String)
-evalString ws expr = return $ parseLine ws expr
+evalString :: WorldState -> String -> (WorldState, Maybe String)
+evalString ws expr = parseLine ws expr
 
 evalAndPrint :: WorldState -> String -> IO (WorldState)
-evalAndPrint ws expr = do let (newWorldState, maybeMsg) = evalString ws expr
+evalAndPrint ws expr = do let (nws, maybeMsg) = evalString ws expr
                           case maybeMsg of
                             Just msg -> putStrLn $ U.wrap 60 msg
                             Nothing -> putStrLn "<nothing>"
-                          return newWorldState
+                          return nws
 
-until_ :: Monad m => (a -> Bool) -> m a -> (a -> m (a)) -> m ()
-until_ pred prompt action = do
+until_ :: Monad m => (a -> Bool) -> m a -> (s -> a -> m s) -> s -> m s
+until_ pred prompt action state = do
   result <- prompt
   if pred result
-  then return ()
-  else action result >> until_ pred prompt action
+  then return state
+  else action state result >>= until_ pred prompt action
 
-runRepl :: IO ()
-runRepl = until_ (== "quit") (readPrompt "> ") evalAndPrint
+runRepl :: WorldState -> IO WorldState
+runRepl = until_  (== "quit") (readPrompt "> ") evalAndPrint
 
-runAdventure :: RoomMap -> ItemMap -> AliasMap -> IO ()
+runAdventure :: RoomMap -> ItemMap -> AliasMap -> IO WorldState
 runAdventure roomMap itemMap aliasMap =
   do let ws = makeWorldState (WorldDefinition roomMap itemMap) aliasMap
-     ws <- eval ws ":j start"
-     putStrLn $ "Finished with score " ++ show 0
+     evalAndPrint ws ":j start" >>= runRepl
+
+     -- ws <- eval ws ":j start"
+     -- putStrLn $ "Finished with score " ++ show 0
