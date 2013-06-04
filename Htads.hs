@@ -82,13 +82,10 @@ getItemDescriptions item = [ a ++ " " ++ n | a <- adjectPhrases, n <- nounPhrase
           genComb n = U.combinations n adjects
 
 getItemScore :: Item -> Int
-getItemScore item = maybe 0 exScore $ List.find isScore attrs
-    where attrs = itemAttributes item
-          isScore el = case el of
-                         Score _ -> True
-                         _ -> False
+getItemScore item = maybe 0 exScore $ List.find isScore (itemAttributes item)
+    where isScore (Score _) = True
+          isScore _ = False
           exScore (Score n) = n
-
 
 itemByDesc :: [Item] -> String -> Maybe Item
 itemByDesc items itemDesc = List.find matches items
