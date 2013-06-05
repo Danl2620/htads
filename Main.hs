@@ -31,5 +31,4 @@ main =
            Left e -> Map.empty
            Right r -> Map.fromList r
      endWs <- runAdventure g_roomMap g_itemMap aliases
-     let score = sum $ map (getItemScore . (lookupItem (worldDefinition endWs))) (inventory (playerInfo endWs))
-     putStrLn $ "Finished with score " ++ show score
+     putStrLn $ "Finished with score " ++ show (getScore endWs)

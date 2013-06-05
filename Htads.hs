@@ -5,6 +5,7 @@ import qualified Data.Char as Char
 import qualified Data.Map as Map
 import qualified Data.List as List
 import qualified Data.Text as Text
+import qualified Data.Maybe as Maybe
 
 import Alias
 import qualified Util as U
@@ -81,8 +82,13 @@ getItemDescriptions item = [ a ++ " " ++ n | a <- adjectPhrases, n <- nounPhrase
           adjects = adjectives item
           genComb n = U.combinations n adjects
 
+itemIsFixed :: Item -> Bool
+itemIsFixed = Maybe.isJust . List.find isFixed . itemAttributes 
+  where isFixed Fixed = True
+        isFixed _ = False
+
 getItemScore :: Item -> Int
-getItemScore item = maybe 0 exScore $ List.find isScore (itemAttributes item)
+getItemScore = maybe 0 exScore . List.find isScore . itemAttributes
     where isScore (Score _) = True
           isScore _ = False
           exScore (Score n) = n
@@ -150,8 +156,8 @@ parseCommand ws cmdline =
       "quit" -> Quit
       "examine" -> Examine restStr
       _ -> Error $ "Unrecognized command " ++ cmd
-    where wordList = words $ map Char.toLower (translateCommand (aliases ws) cmdline)
-          cmd = head wordList
+    where wordList = words $ map Char.toLower $ translateCommand (aliases ws) cmdline
+          cmd = translateCommand (aliases ws) $ head wordList
           rest = tail wordList
           restStr = List.intercalate " " rest
           translateCommand aliases cmd = maybe cmd id $ Map.lookup cmd aliases
@@ -170,15 +176,19 @@ goToRoom ws roomName =
 tryPickupItem :: WorldState -> ItemDesc -> (WorldState, Maybe String)
 tryPickupItem ws itemDesc =
     case maybeItem of
-      Just item -> let pi = (playerInfo ws)
-                       newPi = pi { inventory = iId : (inventory pi) }
-                       newIm = Map.update removeItem roomName (roomItemMap ws) in
-                   (ws { playerInfo = newPi,
-                         roomItemMap = newIm
-                       }, Just $ name ++ " picked up." )
-                   where removeItem itemList = Just $ List.delete (itemId item) itemList
-                         name = itemName item
-                         iId = itemId item
+      Just item -> 
+        if itemIsFixed item
+        then (ws, Just $ desc ++ " cannot be picked up.")
+        else let pi = (playerInfo ws)
+                 newPi = pi { inventory = iId : (inventory pi) }
+                 newIm = Map.update removeItem roomName (roomItemMap ws) in
+             (ws { playerInfo = newPi,
+                   roomItemMap = newIm
+                 }, Just $ desc ++ " picked up." )
+        where removeItem itemList = Just $ List.delete iId itemList
+              name = itemName item
+              desc = itemDescription item
+              iId = itemId item
       Nothing -> (ws, Just $ "There is no " ++ itemDesc ++ " here.")
     where roomName = currentRoom (playerInfo ws)
           items = case Map.lookup roomName $ roomItemMap ws of
@@ -188,41 +198,31 @@ tryPickupItem ws itemDesc =
 
 showInventory :: WorldState -> (WorldState, Maybe String)
 showInventory ws = (ws, Just $ "You are carrying:\n  " ++ List.intercalate "\n  " items )
-    where items = map (itemDescription . (lookupItem (worldDefinition ws))) (inventory (playerInfo ws))
+    where items = map 
+                  (itemDescription . (lookupItem (worldDefinition ws))) 
+                  (inventory (playerInfo ws))
 
-parseLine :: WorldState -> String -> (WorldState, Maybe String)
-parseLine ws cmdline = case parseCommand ws cmdline of
-                        Look -> (ws, Just $ getRoomDescription ws roomName)
-                        Go dir -> case Map.lookup dir (connections room) of
-                                    Just roomName -> goToRoom ws roomName
-                                    Nothing -> (ws, Just "Can't go that direction")
-                        Skip roomName -> goToRoom ws roomName
-                        Examine itemDesc -> (ws, Just $ "It looks like a " ++ itemDesc)
-                        Get itemDesc -> tryPickupItem ws itemDesc
-                        Inventory -> showInventory ws
-                        Quit -> error "done"
-                        Error msg -> (ws, Just msg)
-                      where roomName = currentRoom $ playerInfo ws
-                            room = lookupRoom (worldDefinition ws) roomName
-
-eval :: WorldState -> String -> IO WorldState
-eval ws cmd = do let (newWorldState, maybeMsg) = parseLine ws cmd
-                 case maybeMsg of
-                   Just msg -> putStrLn $ U.wrap 60 msg
-                   Nothing -> putStrLn ""
-                 flushStr "> "
-                 inpStr <- getLine
-                 eval newWorldState inpStr
+evalString :: WorldState -> String -> (WorldState, Maybe String)
+evalString ws cmdline = 
+  case parseCommand ws cmdline of
+    Look -> (ws, Just $ getRoomDescription ws roomName)
+    Go dir -> case Map.lookup dir (connections room) of
+      Just roomName -> goToRoom ws roomName
+      Nothing -> (ws, Just "Can't go that direction")
+    Skip roomName -> goToRoom ws roomName
+    Examine itemDesc -> (ws, Just $ "It looks like a " ++ itemDesc)
+    Get itemDesc -> tryPickupItem ws itemDesc
+    Inventory -> showInventory ws
+    Quit -> error "done"
+    Error msg -> (ws, Just msg)
+  where roomName = currentRoom $ playerInfo ws
+        room = lookupRoom (worldDefinition ws) roomName
 
 flushStr :: String -> IO ()
 flushStr str = putStr str >> hFlush stdout
 
 readPrompt :: String ->	IO String
 readPrompt prompt = flushStr prompt >> getLine
-
-
-evalString :: WorldState -> String -> (WorldState, Maybe String)
-evalString ws expr = parseLine ws expr
 
 evalAndPrint :: WorldState -> String -> IO (WorldState)
 evalAndPrint ws expr = do let (nws, maybeMsg) = evalString ws expr
@@ -232,19 +232,20 @@ evalAndPrint ws expr = do let (nws, maybeMsg) = evalString ws expr
                           return nws
 
 until_ :: Monad m => (a -> Bool) -> m a -> (s -> a -> m s) -> s -> m s
-until_ pred prompt action state = do
-  result <- prompt
-  if pred result
-  then return state
-  else action state result >>= until_ pred prompt action
+until_ pred prompt action state = 
+  do result <- prompt
+     if pred result
+       then return state
+       else action state result >>= until_ pred prompt action
 
 runRepl :: WorldState -> IO WorldState
 runRepl = until_  (== "quit") (readPrompt "> ") evalAndPrint
+
+getScore :: WorldState -> Int
+getScore ws = 
+  sum $ map (getItemScore . (lookupItem (worldDefinition ws))) (inventory (playerInfo ws))
 
 runAdventure :: RoomMap -> ItemMap -> AliasMap -> IO WorldState
 runAdventure roomMap itemMap aliasMap =
   do let ws = makeWorldState (WorldDefinition roomMap itemMap) aliasMap
      evalAndPrint ws ":j start" >>= runRepl
-
-     -- ws <- eval ws ":j start"
-     -- putStrLn $ "Finished with score " ++ show 0
