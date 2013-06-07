@@ -20,8 +20,18 @@ g_itemMap = Map.fromList
           ,("largeSandbag", Item "largeSandbag" ["sandbag", "bag"] ["large"] "A large bag of sand" [Bulky] "cave")
           ,("smallSandbag1", Item "smallSandbag1" ["sandbag", "bag"] ["small", "red"] "A small red bag of sand" [] "cave")
           ,("smallSandbag2", Item "smallSandbag2" ["sandbag", "bag"] ["small", "blue"] "A small blue bag of sand" [] "cave")
-          ,("knife", Item "knife" ["knife"] ["large"] "A large kitchen kife" [] "table")
+          --,("knife", Item "knife" ["knife"] ["large"] "A large kitchen kife" [] "table")
           ]
+          
+          
+
+
+-- "item knife {}"
+-- "item knife { nouns [knife] adjectives [large] desc \"A large kitchen kife\" startAt table }"
+-- "item knife { nouns [knife] adjectives [large] desc \"A large kitchen kife\" startAt table }"
+-- "item knife { nouns [knife] adjectives [large] desc \"A large kitchen kife\" startAt table }"
+-- "item knife { nouns [knife] adjectives [large] desc \"A large kitchen kife\" startAt table }"
+
 
 main :: IO ()
 main =

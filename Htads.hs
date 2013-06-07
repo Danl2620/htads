@@ -7,12 +7,9 @@ import qualified Data.List as List
 import qualified Data.Text as Text
 import qualified Data.Maybe as Maybe
 
+-- local module
 import Alias
 import qualified Util as U
-
--- string with no whitespace:
--- newtype NoWhitespace = NoWhitespace String; toString (NoWhitespace s) = s; fromString s | all (not . isSpace) s = NoWhiteSpace s | otherwise = error "no"
--- strip = reverse . dropWhile isSpace . reverse . dropWhile isSpace
 
 type Word = String
 type RoomName = Word
@@ -31,11 +28,14 @@ data ItemAttribute = Fixed | Bulky | Score Int
 type Connection = Map.Map Compass String
 type AliasMap = Map.Map String String
 
+type RoomMap = Map.Map RoomName Room
+type ItemMap = Map.Map Word Item
+
 data Room = Room {
-      summary :: RoomName
-    , description :: String
-    , connections :: Connection
-    } deriving (Show)
+  summary :: RoomName
+  , description :: String
+  , connections :: Connection
+  } deriving (Show)
 
 data Item = Item {
   itemId :: Word
@@ -54,13 +54,10 @@ itemName item = Text.unpack $ Text.strip $ Text.pack $ adjs ++ " " ++ noun
                       noun = head $ nouns item
 
 data PlayerInfo = PlayerInfo {
-      currentRoom :: RoomName
-    , visitedRooms :: [RoomName]
-    , inventory :: [ItemName]
-      } deriving (Show)
-
-type RoomMap = Map.Map RoomName Room
-type ItemMap = Map.Map Word Item
+  currentRoom :: RoomName
+  , visitedRooms :: [RoomName]
+  , inventory :: [ItemName]
+  } deriving (Show)
 
 
 data WorldDefinition = WorldDefinition {
@@ -83,7 +80,7 @@ getItemDescriptions item = [ a ++ " " ++ n | a <- adjectPhrases, n <- nounPhrase
           genComb n = U.combinations n adjects
 
 itemIsFixed :: Item -> Bool
-itemIsFixed = Maybe.isJust . List.find isFixed . itemAttributes 
+itemIsFixed = Maybe.isJust . List.find isFixed . itemAttributes
   where isFixed Fixed = True
         isFixed _ = False
 
@@ -114,7 +111,6 @@ data WorldState = WorldState {
 makeWorldState :: WorldDefinition -> AliasMap -> WorldState
 makeWorldState wd aliasMap = WorldState wd (PlayerInfo "<none>" [] []) (generateWorldItemMap wd) aliasMap
   where
-    -- generateWorldItemMap :: WorldDefinition -> Map.Map RoomName [ItemName]
     generateWorldItemMap wd =
       Map.fromListWith (++) $ map (\pair -> (startLocation $ snd pair, [fst pair])) $ Map.assocs $ itemMap wd
 
@@ -173,10 +169,22 @@ goToRoom ws roomName =
     (ws { playerInfo = pi }, Just msg)
     where newRoom = lookupRoom (worldDefinition ws) roomName
 
+examineItem :: WorldState -> ItemDesc -> (WorldState, Maybe String)
+examineItem ws itemDesc =
+    case maybeItem of
+      Just item -> (ws, Just $ "It looks like a " ++ itemDesc)
+      Nothing -> (ws, Just $ "There is no " ++ itemDesc ++ " here.")
+    where roomName = currentRoom (playerInfo ws)
+          roomItems = case Map.lookup roomName $ roomItemMap ws of
+                    Just lst -> map (lookupItem $ worldDefinition ws) lst
+                    Nothing -> []
+          playerItems = map (lookupItem (worldDefinition ws)) (inventory (playerInfo ws))
+          maybeItem = itemByDesc (roomItems ++ playerItems) itemDesc
+
 tryPickupItem :: WorldState -> ItemDesc -> (WorldState, Maybe String)
 tryPickupItem ws itemDesc =
     case maybeItem of
-      Just item -> 
+      Just item ->
         if itemIsFixed item
         then (ws, Just $ desc ++ " cannot be picked up.")
         else let pi = (playerInfo ws)
@@ -198,19 +206,19 @@ tryPickupItem ws itemDesc =
 
 showInventory :: WorldState -> (WorldState, Maybe String)
 showInventory ws = (ws, Just $ "You are carrying:\n  " ++ List.intercalate "\n  " items )
-    where items = map 
-                  (itemDescription . (lookupItem (worldDefinition ws))) 
+    where items = map
+                  (itemDescription . lookupItem (worldDefinition ws))
                   (inventory (playerInfo ws))
 
 evalString :: WorldState -> String -> (WorldState, Maybe String)
-evalString ws cmdline = 
+evalString ws cmdline =
   case parseCommand ws cmdline of
     Look -> (ws, Just $ getRoomDescription ws roomName)
     Go dir -> case Map.lookup dir (connections room) of
       Just roomName -> goToRoom ws roomName
-      Nothing -> (ws, Just "Can't go that direction")
+      Nothing -> (ws, Just "You can't go that direction")
     Skip roomName -> goToRoom ws roomName
-    Examine itemDesc -> (ws, Just $ "It looks like a " ++ itemDesc)
+    Examine itemDesc -> examineItem ws itemDesc
     Get itemDesc -> tryPickupItem ws itemDesc
     Inventory -> showInventory ws
     Quit -> error "done"
@@ -232,7 +240,7 @@ evalAndPrint ws expr = do let (nws, maybeMsg) = evalString ws expr
                           return nws
 
 until_ :: Monad m => (a -> Bool) -> m a -> (s -> a -> m s) -> s -> m s
-until_ pred prompt action state = 
+until_ pred prompt action state =
   do result <- prompt
      if pred result
        then return state
@@ -242,7 +250,7 @@ runRepl :: WorldState -> IO WorldState
 runRepl = until_  (== "quit") (readPrompt "> ") evalAndPrint
 
 getScore :: WorldState -> Int
-getScore ws = 
+getScore ws =
   sum $ map (getItemScore . (lookupItem (worldDefinition ws))) (inventory (playerInfo ws))
 
 runAdventure :: RoomMap -> ItemMap -> AliasMap -> IO WorldState

@@ -9,5 +9,6 @@ se = go southeast
 sw = go southwest
 i = inventory
 l = look
+g = get
 ex = examine
 q = quit
