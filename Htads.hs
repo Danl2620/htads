@@ -46,6 +46,9 @@ data Item = Item {
   , startLocation :: String
   } deriving (Show)
 
+data Object = ObjectRoom Room | ObjectItem Item
+              deriving (Show)
+
 itemName :: Item -> ItemName
 itemName item = Text.unpack $ Text.strip $ Text.pack $ adjs ++ " " ++ noun
                 where adjs = if null $ adjectives item
