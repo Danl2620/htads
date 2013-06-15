@@ -22,12 +22,27 @@ def =
        spaces
        defId <- word
        spaces
-       second <- body
-       eol                       -- end of line
-       return $
-              case defType of
-                   "item" -> H.ObjectItem $ H.Item defId [] [] "" [] ""
-                   "room" -> H.ObjectRoom $ H.Room defId "asdf" (Map.fromList [])
+       obj <- case defType of
+                "item" -> parseItem
+                "room" -> parseRoom
+       return obj
+
+parseItem :: GenParser Char st H.Object
+parseItem = do char '{'
+               sepBy line spaces
+               char '}'
+               return []
+
+line :: GenParser Char st [String]
+line = key <- word
+       spaces
+       value <- many1
+
+parseRoom :: GenParser Char st H.Object
+parseRoom = undefined
+
+--- H.ObjectItem $ H.Item defId [] [] "" [] ""
+--- H.ObjectRoom $ H.Room defId "asdf" (Map.fromList [])
 
 -- defType :: GenParser Char st [String]
 -- defType = "item" <|> "room"
@@ -43,7 +58,7 @@ body = do spaces
           char '}'
           return []
 
-parseString :: Parser String
+Parsestring :: Parser String
 parseString = do char '"'
                  x <- many (noneOf "\"")
                  char '"'

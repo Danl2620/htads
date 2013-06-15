@@ -1,0 +1,24 @@
+
+item knife
+{
+	nouns [knife]
+   	adjectives [large]
+	desc "A large kitchen kife"
+	startAt table
+}
+
+item table
+{
+	nouns [table]
+	adjectives [small]
+	desc "A small kitchen table"
+	attributes [Bulky]
+	startAt cave
+}
+
+room cave
+{
+	shortDesc "Cave"
+	desc "You're inside a dark and musty cave. Sunlight pours in from a passage to the south."
+-- 	connections [(South, start
+}
