@@ -16,9 +16,17 @@ item table
 	startAt cave
 }
 
+
+room start
+{
+	shortDesc "Outside cave"
+	desc "You're standing in the bright sunlight just outside of a large, dark, foreboding cave, which lies to the north. "
+	connections { North : cave }
+}
+
 room cave
 {
 	shortDesc "Cave"
 	desc "You're inside a dark and musty cave. Sunlight pours in from a passage to the south."
--- 	connections [(South, start
+ 	connections { South : start }
 }
