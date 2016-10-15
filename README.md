@@ -1,0 +1,2 @@
+
+ghc Main.hs && ./Main
