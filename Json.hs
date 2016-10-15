@@ -1,3 +1,4 @@
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE TypeSynonymInstances, OverlappingInstances #-}
 {-# LANGUAGE FlexibleInstances #-}
 
