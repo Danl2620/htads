@@ -6,6 +6,7 @@ import qualified Data.Map as Map
 import qualified Data.List as List
 import qualified Data.Text as Text
 import qualified Data.Maybe as Maybe
+import qualified Data.Set as Set
 
 -- local module
 import Alias
@@ -15,6 +16,7 @@ type TextWord = String
 type RoomName = TextWord
 type ItemName = TextWord
 type ItemDesc = String
+type WordSet = Set.Set TextWord
 
 data Compass = North | NorthEast | East | SouthEast | South | SouthWest | West | NorthWest
                deriving (Ord, Eq, Show, Read)
@@ -61,8 +63,8 @@ itemName item = Text.unpack $ Text.strip $ Text.pack $ adjs ++ " " ++ noun
 
 data PlayerInfo = PlayerInfo {
   currentRoom :: RoomName
-  , visitedRooms :: [RoomName]
-  , inventory :: [ItemName]
+  , visitedRooms :: WordSet
+  , inventory :: WordSet
   } deriving (Show)
 
 
@@ -100,13 +102,6 @@ itemByDesc :: [Item] -> String -> Maybe Item
 itemByDesc items itemDesc = List.find matches items
     where matches item = itemDesc `elem` getItemDescriptions item
 
-combineVisitedRooms :: RoomName -> [RoomName] -> [RoomName]
-combineVisitedRooms name nameList =
-    if name `elem` nameList
-       then nameList
-       else name : nameList
-
-
 data WorldState = WorldState {
   worldDefinition :: WorldDefinition
   , playerInfo :: PlayerInfo
@@ -115,7 +110,7 @@ data WorldState = WorldState {
   } deriving (Show)
 
 makeWorldState :: WorldDefinition -> AliasMap -> WorldState
-makeWorldState wd aliasMap = WorldState wd (PlayerInfo "<none>" [] []) (generateWorldItemMap wd) aliasMap
+makeWorldState wd aliasMap = WorldState wd (PlayerInfo "<none>" Set.empty Set.empty) (generateWorldItemMap wd) aliasMap
   where
     generateWorldItemMap wd =
       Map.fromListWith (++) $ map (\pair -> (startLocation $ snd pair, [fst pair])) $ Map.assocs $ itemMap wd
@@ -159,7 +154,6 @@ parseCommand ws cmdline =
       "examine" -> Examine restStr
       _ -> Error $ "Unrecognized command " ++ cmd
     where wordList = words $ map Char.toLower $ translateCommand (aliases ws) cmdline
-          -- cmd = translateCommand (aliases ws) $ head wordList
           cmd = head wordList
           rest = tail wordList
           restStr = List.intercalate " " rest
@@ -169,8 +163,8 @@ goToRoom :: WorldState -> RoomName -> (WorldState, Result)
 goToRoom ws roomName =
     let oldPi = (playerInfo ws)
         pi = oldPi { currentRoom = roomName
-                   , visitedRooms = combineVisitedRooms roomName (visitedRooms oldPi) }
-        msg = if roomName `elem` (visitedRooms oldPi)
+                   , visitedRooms = Set.insert roomName (visitedRooms oldPi) }
+        msg = if roomName `Set.member` (visitedRooms oldPi)
               then summary newRoom
               else getRoomDescription ws roomName in
     (ws { playerInfo = pi }, Message msg)
@@ -185,7 +179,7 @@ examineItem ws itemDesc =
           roomItems = case Map.lookup roomName $ roomItemMap ws of
                     Just lst -> map (lookupItem $ worldDefinition ws) lst
                     Nothing -> []
-          playerItems = map (lookupItem (worldDefinition ws)) (inventory (playerInfo ws))
+          playerItems = map (lookupItem (worldDefinition ws)) $ Set.elems (inventory (playerInfo ws))
           maybeItem = itemByDesc (roomItems ++ playerItems) itemDesc
 
 tryPickupItem :: WorldState -> ItemDesc -> (WorldState, Result)
@@ -195,7 +189,7 @@ tryPickupItem ws itemDesc =
         if itemIsFixed item
         then (ws, Message $ desc ++ " cannot be picked up.")
         else let pi = (playerInfo ws)
-                 newPi = pi { inventory = iId : (inventory pi) }
+                 newPi = pi { inventory = Set.insert iId (inventory pi) }
                  newIm = Map.update removeItem roomName (roomItemMap ws) in
              (ws { playerInfo = newPi,
                    roomItemMap = newIm
@@ -213,9 +207,10 @@ tryPickupItem ws itemDesc =
 
 showInventory :: WorldState -> (WorldState, Result)
 showInventory ws = (ws, Message $ "You are carrying:\n  " ++ List.intercalate "\n  " items )
-    where items = map
-                  (itemDescription . lookupItem (worldDefinition ws))
-                  (inventory (playerInfo ws))
+    where items =
+            Set.elems $ Set.map
+            (itemDescription . lookupItem (worldDefinition ws))
+            (inventory (playerInfo ws))
 
 evalString :: WorldState -> String -> (WorldState, Result)
 evalString ws cmdline =
@@ -263,7 +258,7 @@ runRepl = until_ done (readPrompt "> ") evalAndPrint
 
 getScore :: WorldState -> Int
 getScore ws =
-  sum $ map (getItemScore . (lookupItem (worldDefinition ws))) (inventory (playerInfo ws))
+  sum $ Set.elems $ Set.map (getItemScore . (lookupItem (worldDefinition ws))) (inventory (playerInfo ws))
 
 runAdventure :: RoomMap -> ItemMap -> AliasMap -> IO (WorldState, Result)
 runAdventure roomMap itemMap aliasMap =
