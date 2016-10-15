@@ -22,8 +22,8 @@ g_itemMap = Map.fromList
           ,("smallSandbag2", Item "smallSandbag2" ["sandbag", "bag"] ["small", "blue"] "A small blue bag of sand" [] "cave")
           --,("knife", Item "knife" ["knife"] ["large"] "A large kitchen kife" [] "table")
           ]
-          
-          
+
+
 
 
 -- "item knife {}"
@@ -40,5 +40,5 @@ main =
      let aliases = case parseAliases c of
            Left e -> Map.empty
            Right r -> Map.fromList r
-     endWs <- runAdventure g_roomMap g_itemMap aliases
+     (endWs, res) <- runAdventure g_roomMap g_itemMap aliases
      putStrLn $ "Finished with score " ++ show (getScore endWs)
