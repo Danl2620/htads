@@ -1,2 +1,3 @@
 
-ghc Main.hs && ./Main
+> stack build
+> stack exec htads-exe
