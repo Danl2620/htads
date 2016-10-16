@@ -1,32 +1,10 @@
-
-item knife
-{
-	nouns [knife]
-   	adjectives [large]
-	desc "A large kitchen kife"
-	startAt table
-}
-
-item table
-{
-	nouns [table]
-	adjectives [small]
-	desc "A small kitchen table"
-	attributes [Bulky]
-	startAt cave
-}
-
-
-room start
-{
-	shortDesc "Outside cave"
-	desc "You're standing in the bright sunlight just outside of a large, dark, foreboding cave, which lies to the north. "
-	connections { North : cave }
-}
-
-room cave
-{
-	shortDesc "Cave"
-	desc "You're inside a dark and musty cave. Sunlight pours in from a passage to the south."
- 	connections { South : start }
-}
+- name: start
+  summary: Outside Cave
+  description: You are standing in the bright sunlight just outside of a large, dark, foreboding cave, which lies to the north.
+  connections:
+    - [tag: North, cave]
+- name: cave
+  summary: "Cave"
+  description: "You're inside a dark and musty cave. Sunlight pours in from a passage to the south."
+  connections:
+    - [tag: South, start]

@@ -3,7 +3,15 @@ module Lib
     ) where
 
 import System.IO
-import qualified Data.Map as Map
+import qualified Data.Map.Strict as Map
+import Data.Text as Text
+import GHC.Generics (Generic)
+import Control.Monad
+import Data.Yaml
+--import Data.Yaml.Types
+import Control.Applicative -- <$>, <*>
+import Data.Maybe (fromJust)
+import qualified Data.ByteString.Char8 as BS
 
 import Htads
 import Alias
@@ -25,22 +33,71 @@ g_itemMap = Map.fromList
           --,("knife", Item "knife" ["knife"] ["large"] "A large kitchen kife" [] "table")
           ]
 
+data Link = Dir Compass String
+  deriving (Generic, Show)
+
+instance FromJSON Compass where
+  parseJSON (Object o) = do
+    tag <- o .: "tag"
+    case (tag :: Text.Text) of
+      "North" -> return North
+      "South" -> return South
+      "East" -> return East
+      "West" -> return West
+      _ -> mzero
+  parseJSON _ = error "Can't parse Compass from YAML/JSON"
+
+-- instance FromJSON Connection
+instance FromJSON ItemAttribute
+instance FromJSON Link
 
 
+data RoomStage0 = RoomStage0 {
+  name :: RoomName
+  , summary :: String
+  , description :: String
+  , connections :: [Link]
+  } deriving (Show, Generic)
 
--- "item knife {}"
--- "item knife { nouns [knife] adjectives [large] desc \"A large kitchen kife\" startAt table }"
--- "item knife { nouns [knife] adjectives [large] desc \"A large kitchen kife\" startAt table }"
--- "item knife { nouns [knife] adjectives [large] desc \"A large kitchen kife\" startAt table }"
--- "item knife { nouns [knife] adjectives [large] desc \"A large kitchen kife\" startAt table }"
+instance FromJSON RoomStage0 where
+    parseJSON (Object v) = RoomStage0 <$>
+                           v .: "name" <*>
+                           v .: "summary" <*>
+                           v .: "description" <*>
+                           v .: "connections"
+    -- A non-Object value is of the wrong type, so fail.
+    parseJSON _ = error "Can't parse Room from YAML/JSON"
+
+instance FromJSON Item where
+    parseJSON (Object v) = Item <$>
+                           v .: "itemId" <*>
+                           v .: "nouns" <*>
+                           v .: "adjectives" <*>
+                           v .: "itemDescription" <*>
+                           v .: "itemAttributes" <*>
+                           v .: "startLocation"
+    -- A non-Object value is of the wrong type, so fail.
+    parseJSON _ = error "Can't parse Item from YAML/JSON"
+
+
+someFunc :: IO ()
+someFunc = do
+         ymlData <- BS.readFile "defs/defs.txt"
+         let
+           rooms = Data.Yaml.decode ymlData :: Maybe [RoomStage0]
+           --rooms = decode "name: thing" :: Maybe RoomStage0
+           -- items = Data.Yaml.decode ymlData :: Maybe [Item]
+         -- Print it, just for show
+         print rooms
 
 
 play :: IO ()
-play =
-  do h <- openFile "defs/aliases.txt" ReadMode
-     c <- hGetContents h
-     let aliases = case parseAliases c of
-           Left e -> Map.empty
-           Right r -> Map.fromList r
-     (endWs, res) <- runAdventure g_roomMap g_itemMap aliases
-     putStrLn $ "Finished with score " ++ show (getScore endWs)
+play = someFunc
+  -- do someFunc
+  --    h <- openFile "defs/aliases.txt" ReadMode
+  --    c <- hGetContents h
+  --    let aliases = case parseAliases c of
+  --          Left e -> Map.empty
+  --          Right r -> Map.fromList r
+  --    (endWs, res) <- runAdventure g_roomMap g_itemMap aliases
+  --    putStrLn $ "Finished with score " ++ show (getScore endWs)

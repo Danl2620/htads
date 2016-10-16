@@ -2,11 +2,12 @@ module Htads where
 
 import System.IO
 import qualified Data.Char as Char
-import qualified Data.Map as Map
+import qualified Data.Map.Strict as Map
 import qualified Data.List as List
 import qualified Data.Text as Text
 import qualified Data.Maybe as Maybe
 import qualified Data.Set as Set
+import GHC.Generics
 
 -- local module
 import Alias
@@ -19,7 +20,7 @@ type ItemDesc = String
 type WordSet = Set.Set TextWord
 
 data Compass = North | NorthEast | East | SouthEast | South | SouthWest | West | NorthWest
-               deriving (Ord, Eq, Show, Read)
+               deriving (Ord, Eq, Show, Read, Generic)
 
 data Verb = Look | Go Compass | Examine ItemDesc | Get ItemDesc | Inventory | Quit | Skip RoomName | Error String
             deriving (Show)
@@ -28,7 +29,7 @@ data Result = Message String | Start | End
   deriving (Show, Eq)
 
 data ItemAttribute = Fixed | Bulky | Score Int
-  deriving (Show)
+  deriving (Show, Generic)
 
 type Connection = Map.Map Compass String
 type AliasMap = Map.Map String String
@@ -40,7 +41,7 @@ data Room = Room {
   summary :: RoomName
   , description :: String
   , connections :: Connection
-  } deriving (Show)
+  } deriving (Show, Generic)
 
 data Item = Item {
   itemId :: TextWord
@@ -49,7 +50,7 @@ data Item = Item {
   , itemDescription :: String
   , itemAttributes :: [ItemAttribute]
   , startLocation :: String
-  } deriving (Show)
+  } deriving (Show, Generic)
 
 data Object = ObjectRoom Room | ObjectItem Item
               deriving (Show)
