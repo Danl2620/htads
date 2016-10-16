@@ -1,4 +1,4 @@
-{-# LANGUAGE TypeSynonymInstances, OverlappingInstances #-}
+{-# LANGUAGE TypeSynonymInstances #-}
 
 module ApplicativeParsec
     (
@@ -20,4 +20,3 @@ import Text.ParserCombinators.Parsec hiding (many, optional, (<|>))
 -- instance Alternative (GenParser s a) where
 --     empty = mzero
 --     (<|>) = mplus
-

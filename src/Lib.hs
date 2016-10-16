@@ -1,4 +1,6 @@
-module Main where
+module Lib
+    ( play
+    ) where
 
 import System.IO
 import qualified Data.Map as Map
@@ -33,9 +35,9 @@ g_itemMap = Map.fromList
 -- "item knife { nouns [knife] adjectives [large] desc \"A large kitchen kife\" startAt table }"
 
 
-main :: IO ()
-main =
-  do h <- openFile "aliases.txt" ReadMode
+play :: IO ()
+play =
+  do h <- openFile "defs/aliases.txt" ReadMode
      c <- hGetContents h
      let aliases = case parseAliases c of
            Left e -> Map.empty
