@@ -1,4 +1,6 @@
-module Util where
+module Util
+  (combinations,
+   wrap) where
 
 import qualified Data.Char as Char
 
@@ -16,4 +18,3 @@ wrap width fullStr =
                                  len = length chop
                                  pre = (unwords $ take (len - 1) chop) in
                              pre ++ "\n" ++ (wrap width $ dropWhile Char.isSpace $ drop (length pre) str)
-

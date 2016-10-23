@@ -4,7 +4,7 @@
   connections:
     - [tag: North, cave]
 - name: cave
-  summary: "Cave"
+  summary: Cave
   description: "You're inside a dark and musty cave. Sunlight pours in from a passage to the south."
   connections:
     - [tag: South, start]

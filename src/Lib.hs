@@ -3,6 +3,7 @@ module Lib
     ) where
 
 import System.IO
+import qualified Data.List as List
 import qualified Data.Map.Strict as Map
 import Data.Text as Text
 import GHC.Generics (Generic)
@@ -13,47 +14,47 @@ import Control.Applicative -- <$>, <*>
 import Data.Maybe (fromJust)
 import qualified Data.ByteString.Char8 as BS
 
-import Htads
+import qualified Htads as H
 import Alias
 
-g_roomMap :: RoomMap
+g_roomMap :: H.RoomMap
 g_roomMap = Map.fromList
-          [("start", Room "Outside cave" "You're standing in the bright sunlight just outside of a large, dark, foreboding cave, which lies to the north. " (Map.fromList [(North, "cave")]))
-          ,("cave", Room "Cave" "You're inside a dark and musty cave. Sunlight pours in from a passage to the south." (Map.fromList [(South, "start")]))
+          [("start", H.Room "Outside cave" "You're standing in the bright sunlight just outside of a large, dark, foreboding cave, which lies to the north. " (Map.fromList [(H.North, "cave")]))
+          ,("cave", H.Room "Cave" "You're inside a dark and musty cave. Sunlight pours in from a passage to the south." (Map.fromList [(H.South, "start")]))
           ]
 
-g_itemMap :: ItemMap
+g_itemMap :: H.ItemMap
 g_itemMap = Map.fromList
-          [("pedestal", Item "pedestal" ["pedestal"] [] "A pedestal" [Fixed] "cave")
-          ,("skull", Item "skull" ["skull"] ["gold"] "A gold skull" [Score 10] "cave")
-          ,("table", Item "table" ["table"] ["small"] "A small kitchen table" [Bulky] "cave")
-          ,("largeSandbag", Item "largeSandbag" ["sandbag", "bag"] ["large"] "A large bag of sand" [Bulky] "cave")
-          ,("smallSandbag1", Item "smallSandbag1" ["sandbag", "bag"] ["small", "red"] "A small red bag of sand" [] "cave")
-          ,("smallSandbag2", Item "smallSandbag2" ["sandbag", "bag"] ["small", "blue"] "A small blue bag of sand" [] "cave")
-          --,("knife", Item "knife" ["knife"] ["large"] "A large kitchen kife" [] "table")
+          [("pedestal", H.Item "pedestal" ["pedestal"] [] "A pedestal" [H.Fixed] "cave")
+          ,("skull", H.Item "skull" ["skull"] ["gold"] "A gold skull" [H.Score 10] "cave")
+          ,("table", H.Item "table" ["table"] ["small"] "A small kitchen table" [H.Bulky] "cave")
+          ,("largeSandbag", H.Item "largeSandbag" ["sandbag", "bag"] ["large"] "A large bag of sand" [H.Bulky] "cave")
+          ,("smallSandbag1", H.Item "smallSandbag1" ["sandbag", "bag"] ["small", "red"] "A small red bag of sand" [] "cave")
+          ,("smallSandbag2", H.Item "smallSandbag2" ["sandbag", "bag"] ["small", "blue"] "A small blue bag of sand" [] "cave")
+          --,("knife", H.Item "knife" ["knife"] ["large"] "A large kitchen kife" [] "table")
           ]
 
-data Link = Dir Compass String
+data Link = Dir H.Compass String
   deriving (Generic, Show)
 
-instance FromJSON Compass where
+instance FromJSON H.Compass where
   parseJSON (Object o) = do
     tag <- o .: "tag"
     case (tag :: Text.Text) of
-      "North" -> return North
-      "South" -> return South
-      "East" -> return East
-      "West" -> return West
+      "North" -> return H.North
+      "South" -> return H.South
+      "East" -> return H.East
+      "West" -> return H.West
       _ -> mzero
   parseJSON _ = error "Can't parse Compass from YAML/JSON"
 
 -- instance FromJSON Connection
-instance FromJSON ItemAttribute
+instance FromJSON H.ItemAttribute
 instance FromJSON Link
 
 
 data RoomStage0 = RoomStage0 {
-  name :: RoomName
+  name :: H.RoomName
   , summary :: String
   , description :: String
   , connections :: [Link]
@@ -68,8 +69,8 @@ instance FromJSON RoomStage0 where
     -- A non-Object value is of the wrong type, so fail.
     parseJSON _ = error "Can't parse Room from YAML/JSON"
 
-instance FromJSON Item where
-    parseJSON (Object v) = Item <$>
+instance FromJSON H.Item where
+    parseJSON (Object v) = H.Item <$>
                            v .: "itemId" <*>
                            v .: "nouns" <*>
                            v .: "adjectives" <*>
@@ -80,15 +81,18 @@ instance FromJSON Item where
     parseJSON _ = error "Can't parse Item from YAML/JSON"
 
 
+convert :: RoomStage0 -> H.Room
+convert r = H.Room (name r) (description r) (Map.fromList [])
+
+readDefs :: BS.ByteString -> Maybe [RoomStage0]
+readDefs contents = Data.Yaml.decode contents :: Maybe [RoomStage0]
+
 someFunc :: IO ()
 someFunc = do
-         ymlData <- BS.readFile "defs/defs.txt"
-         let
-           rooms = Data.Yaml.decode ymlData :: Maybe [RoomStage0]
-           --rooms = decode "name: thing" :: Maybe RoomStage0
-           -- items = Data.Yaml.decode ymlData :: Maybe [Item]
-         -- Print it, just for show
-         print rooms
+  contents <- BS.readFile "defs/defs.txt"
+  print $ case (readDefs contents) of
+            Just rsl -> List.map convert rsl
+            Nothing -> error $ "error reading defs.txt"
 
 
 play :: IO ()
