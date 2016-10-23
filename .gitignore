@@ -1,5 +1,2 @@
-*.hi
-*.o
-Main
-Htads
 .stack-work
+dist
