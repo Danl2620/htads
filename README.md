@@ -1,3 +1,3 @@
 
-> stack build
-> stack exec htads-exe
+- `stack build`
+- `stack exec htads-exe`
