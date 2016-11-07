@@ -1,10 +1,16 @@
-- name: start
+- name: clearing
+  summary: Forest Clearing
+  description: You are standing in a clearing in a dark forest. A path leads north.
+  connections:
+    - [tag: North, outside]
+- name: outside
   summary: Outside Cave
   description: You are standing in the bright sunlight just outside of a large, dark, foreboding cave, which lies to the north.
   connections:
     - [tag: North, cave]
+    - [tag: South, clearing]
 - name: cave
   summary: Cave
   description: "You're inside a dark and musty cave. Sunlight pours in from a passage to the south."
   connections:
-    - [tag: South, start]
+    - [tag: South, outside]
