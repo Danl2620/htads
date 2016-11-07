@@ -87,8 +87,8 @@ convert r = H.Room (name r) (description r) (Map.fromList [])
 readDefs :: BS.ByteString -> Maybe [RoomStage0]
 readDefs contents = Data.Yaml.decode contents :: Maybe [RoomStage0]
 
-someFunc :: IO ()
-someFunc = do
+testReadDefs :: IO ()
+testReadDefs = do
   contents <- BS.readFile "defs/defs.txt"
   print $ case (readDefs contents) of
             Just rsl -> List.map convert rsl
@@ -96,12 +96,10 @@ someFunc = do
 
 
 play :: IO ()
-play = someFunc
-  -- do someFunc
-  --    h <- openFile "defs/aliases.txt" ReadMode
-  --    c <- hGetContents h
-  --    let aliases = case parseAliases c of
-  --          Left e -> Map.empty
-  --          Right r -> Map.fromList r
-  --    (endWs, res) <- runAdventure g_roomMap g_itemMap aliases
-  --    putStrLn $ "Finished with score " ++ show (getScore endWs)
+play = do h <- openFile "defs/aliases.txt" ReadMode
+          c <- hGetContents h
+          let aliases = case parseAliases c of
+                Left e -> Map.empty
+                Right r -> Map.fromList r
+          (endWs, res) <- H.runAdventure g_roomMap g_itemMap aliases
+          putStrLn $ "Finished with score " ++ show (H.getScore endWs)
